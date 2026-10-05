@@ -18,6 +18,14 @@ foto-log keeps the same one-photo-a-day rhythm, but posts are stored as records 
 - **Database:** Postgres via Drizzle ORM (indexing / app view state)
 - **Hosting:** Google Cloud Run, Cloud SQL, Secret Manager, Artifact Registry, Cloud Build
 
-## Status
+## Development
 
-Early setup. Nothing to run yet.
+```sh
+npm install
+npm run dev        # http://localhost:3000
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Merges to `main` deploy to Cloud Run automatically. See [docs/infra.md](docs/infra.md) and [docs/plan.md](docs/plan.md).
