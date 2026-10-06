@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.github
+Dockerfile
+.dockerignore
+.env*
+*.md
+# Credentials written by google-github-actions/auth in CI
+gha-creds-*.json

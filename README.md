@@ -1,6 +1,6 @@
 # foto-log
 
-A revival of [Fotolog.com](https://en.wikipedia.org/wiki/Fotolog), the photoblogging site of the late 2000s, rebuilt on the [AT Protocol](https://atproto.com) so it has a better chance of surviving than the original did.
+A revival of [Fotolog.com](https://en.wikipedia.org/wiki/Fotolog), the late-2000s site where everyone kept a fotolog, rebuilt on the [AT Protocol](https://atproto.com) so it has a better chance of surviving than the original did.
 
 Hosted at **[foto-log.com](https://foto-log.com)**.
 
@@ -18,6 +18,14 @@ foto-log keeps the same one-photo-a-day rhythm, but posts are stored as records 
 - **Database:** Postgres via Drizzle ORM (indexing / app view state)
 - **Hosting:** Google Cloud Run, Cloud SQL, Secret Manager, Artifact Registry, Cloud Build
 
-## Status
+## Development
 
-Early setup. Nothing to run yet.
+```sh
+npm install
+npm run dev        # http://localhost:3000
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Merges to `main` deploy to Cloud Run automatically. See [docs/infra.md](docs/infra.md) and [docs/plan.md](docs/plan.md).
