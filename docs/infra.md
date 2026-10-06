@@ -7,8 +7,48 @@ Everything is in GCP project `foto-log-app` (billing: Pointless Enterprises), re
 | Resource | Name |
 |---|---|
 | Cloud Run service | `foto-log-web` (min 0 / max 3 instances, 512 MiB, ingress: load balancer only) |
-| Runtime service account | `foto-log-web@foto-log-app.iam.gserviceaccount.com` (no project roles) |
+| Runtime service account | `foto-log-web@foto-log-app.iam.gserviceaccount.com`: `roles/cloudsql.client` on the project, plus `roles/secretmanager.secretAccessor` on the four secrets below only |
 | Artifact Registry (Docker) | `us-central1-docker.pkg.dev/foto-log-app/foto-log`, image `web` |
+
+### Cloud Run settings
+
+Set once by hand. The deploy workflow only changes the image, so these persist across deploys.
+
+| Setting | Value |
+|---|---|
+| Env `PUBLIC_URL` | `https://foto-log.com` (turns on production mode) |
+| Env `INSTANCE_CONNECTION_NAME` | `foto-log-app:us-central1:foto-log-db` |
+| Env `DB_USER` / `DB_NAME` | `fotolog` / `fotolog` |
+| Secret env vars | `OAUTH_PRIVATE_KEY`, `COOKIE_SECRET`, `STORE_ENCRYPTION_KEY`, `DB_PASSWORD` (see below) |
+| Network | Direct VPC egress on network `default`, subnet `default`, `private-ranges-only` |
+
+## Database (Cloud SQL)
+
+| | |
+|---|---|
+| Instance | `foto-log-db`, PostgreSQL 17, Enterprise edition, `db-f1-micro` (shared core, 0.6 GB), zonal, us-central1 |
+| Connection name | `foto-log-app:us-central1:foto-log-db` |
+| Network | **Private IP only** on VPC `default`, via private services access (range `google-managed-services-default`, /20). No public IP. |
+| Storage | 10 GB SSD, auto-increase on |
+| Backups | Daily at 08:00 UTC, 7 kept |
+| Deletion protection | On |
+| Database / user | `fotolog` / `fotolog` (built-in user; password in Secret Manager `db-password`) |
+| Cost | About $9–11/month (instance about $7.70, storage $1.70, backups under $1) |
+
+The app connects with the Cloud SQL Node.js connector (`@google-cloud/cloud-sql-connector`, private IP, TLS) using the password user. Migrations in `drizzle/` run at server start under an advisory lock (`lib/db/migrate.ts`).
+
+To get a SQL shell, use Cloud SQL Studio in the console. The instance has no public IP, so `gcloud sql connect` from a laptop won't work.
+
+## Secrets (Secret Manager)
+
+| Secret | Env var | Contents |
+|---|---|---|
+| `oauth-private-key` | `OAUTH_PRIVATE_KEY` | ES256 private JWK, kid `foto-log-2026-10` (OAuth client authentication) |
+| `cookie-secret` | `COOKIE_SECRET` | 32 random bytes, base64 (signs the session cookie) |
+| `store-encryption-key` | `STORE_ENCRYPTION_KEY` | 32 random bytes, base64 (encrypts OAuth state and sessions in Postgres) |
+| `db-password` | `DB_PASSWORD` | Password for database user `fotolog` |
+
+All were generated directly into Secret Manager and never written to disk. Only the runtime service account can read them. Mounted as `:latest`, so a new version takes effect on the next deploy. See [auth.md](auth.md) for rotation.
 
 ## CI/CD
 
