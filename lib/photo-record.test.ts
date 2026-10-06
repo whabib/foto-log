@@ -80,10 +80,10 @@ describe("dateKeyFor", () => {
 });
 
 describe("isValidDateKey", () => {
-  it.each(["2026-10-06", "2028-02-29", "2026-12-31"])("accepts %s", (k) => {
+  it.each(["2026-10-06", "2028-02-29", "2026-12-31", "0099-01-01", "0004-02-29"])("accepts %s", (k) => {
     expect(isValidDateKey(k)).toBe(true);
   });
-  it.each(["2026-13-01", "2026-02-30", "2027-02-29", "2026-1-01", "20261006", "2026-10-06T00:00", ""])(
+  it.each(["2026-13-01", "2026-02-30", "2027-02-29", "0099-02-29", "2026-1-01", "20261006", "2026-10-06T00:00", ""])(
     "rejects %j",
     (k) => {
       expect(isValidDateKey(k)).toBe(false);
@@ -95,6 +95,8 @@ describe("isValidTimeZone", () => {
   it("accepts IANA names and rejects junk", () => {
     expect(isValidTimeZone("America/New_York")).toBe(true);
     expect(isValidTimeZone("UTC")).toBe(true);
+    expect(isValidTimeZone("Etc/GMT+5")).toBe(true);
+    expect(isValidTimeZone("America/Argentina/Buenos_Aires")).toBe(true);
     expect(isValidTimeZone("Not/AZone")).toBe(false);
     expect(isValidTimeZone("")).toBe(false);
   });
@@ -138,6 +140,13 @@ describe("buildPhotoRecord", () => {
 
   it("rejects an invalid time zone", () => {
     expect(() => buildPhotoRecord(input({ timeZone: "Nowhere/Special" }))).toThrow();
+  });
+
+  it("rejects fixed-offset time zones, which aren't IANA names", () => {
+    for (const tz of ["+01:00", "-0530", "+00"]) {
+      expect(isValidTimeZone(tz), tz).toBe(false);
+      expect(() => buildPhotoRecord(input({ timeZone: tz })), tz).toThrow(RangeError);
+    }
   });
 
   it("rejects a non-image blob", () => {

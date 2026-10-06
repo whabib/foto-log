@@ -9,9 +9,13 @@ export const MAX_IMAGE_BYTES = 1_000_000;
 
 const DATE_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+// IANA names look like "UTC", "America/New_York" or "Etc/GMT+5". This rules
+// out fixed offsets such as "+01:00", which Intl also accepts.
+const IANA_NAME_RE = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)*$/;
+
 /** True if `tz` is an IANA time zone name this runtime knows about. */
 export function isValidTimeZone(tz: string): boolean {
-  if (!tz || tz.length > 64) return false;
+  if (!tz || tz.length > 64 || !IANA_NAME_RE.test(tz)) return false;
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: tz });
     return true;
@@ -25,7 +29,9 @@ export function isValidDateKey(key: string): boolean {
   const m = DATE_KEY_RE.exec(key);
   if (!m) return false;
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const date = new Date(Date.UTC(y, mo - 1, d));
+  // setUTCFullYear, unlike Date.UTC, doesn't map years 0-99 to 1900-1999.
+  const date = new Date(0);
+  date.setUTCFullYear(y, mo - 1, d);
   return (
     date.getUTCFullYear() === y &&
     date.getUTCMonth() === mo - 1 &&
