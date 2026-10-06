@@ -2,7 +2,7 @@ import { getPool } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** Health check: the app is up and can query the database. */
+/** Health check (not /healthz, which Cloud Run reserves): the app is up and can query the database. */
 export async function GET() {
   try {
     const pool = await getPool();
