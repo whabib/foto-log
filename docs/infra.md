@@ -6,7 +6,7 @@ Everything is in GCP project `foto-log-app` (billing: Pointless Enterprises), re
 
 | Resource | Name |
 |---|---|
-| Cloud Run service | `foto-log-web` (min 0 / max 3 instances, 512 MiB) |
+| Cloud Run service | `foto-log-web` (min 0 / max 3 instances, 512 MiB, ingress: load balancer only) |
 | Runtime service account | `foto-log-web@foto-log-app.iam.gserviceaccount.com` (no project roles) |
 | Artifact Registry (Docker) | `us-central1-docker.pkg.dev/foto-log-app/foto-log`, image `web` |
 
@@ -50,10 +50,6 @@ The managed certificate only becomes ACTIVE after these records resolve to the l
 gcloud compute ssl-certificates describe foto-log-cert --global --project=foto-log-app --format='value(managed.status, managed.domainStatus)'
 ```
 
-### Follow-up
+### Ingress
 
-Once the cert is ACTIVE, restrict Cloud Run ingress so all public internet traffic has to come through the load balancer:
-
-```sh
-gcloud run services update foto-log-web --region=us-central1 --project=foto-log-app --ingress=internal-and-cloud-load-balancing
-```
+Cloud Run ingress is `internal-and-cloud-load-balancing`, so the service only accepts traffic through the load balancer. The `*.run.app` URL returns 404. The deploy workflow doesn't change this setting.
