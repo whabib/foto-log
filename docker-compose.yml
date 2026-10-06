@@ -1,0 +1,15 @@
+# Local Postgres for development: `docker compose up -d`
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: fotolog
+      POSTGRES_PASSWORD: fotolog
+      POSTGRES_DB: fotolog
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:
