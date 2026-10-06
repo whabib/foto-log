@@ -52,4 +52,4 @@ gcloud compute ssl-certificates describe foto-log-cert --global --project=foto-l
 
 ### Ingress
 
-Cloud Run ingress is `internal-and-cloud-load-balancing`, so the service only accepts traffic through the load balancer. The `*.run.app` URL returns 404. The deploy workflow doesn't change this setting.
+Cloud Run ingress is `internal-and-cloud-load-balancing`, so public internet traffic must come through the load balancer; qualifying internal traffic can still reach the service directly. Direct public requests to the `*.run.app` URL return 404. The deploy workflow doesn't change this setting.
