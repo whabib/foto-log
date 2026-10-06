@@ -18,4 +18,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm test
+      - name: Generated lexicon code is up to date
+        run: npm run lex:gen && git diff --exit-code -- lib/lexicon
       - run: npm run build
