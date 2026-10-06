@@ -52,7 +52,7 @@ gcloud compute ssl-certificates describe foto-log-cert --global --project=foto-l
 
 ### Follow-up
 
-Once the cert is ACTIVE, restrict Cloud Run ingress so all traffic has to come through the load balancer:
+Once the cert is ACTIVE, restrict Cloud Run ingress so all public internet traffic has to come through the load balancer:
 
 ```sh
 gcloud run services update foto-log-web --region=us-central1 --project=foto-log-app --ingress=internal-and-cloud-load-balancing
