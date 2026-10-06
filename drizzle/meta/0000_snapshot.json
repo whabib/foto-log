@@ -1,5 +1,5 @@
 {
-  "id": "5d0fd624-707f-45a2-b53b-b579f9351271",
+  "id": "fdff2a4e-472b-4134-b40e-433a3d479aaf",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -60,7 +60,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "oauth_state_created_at_idx": {
+          "name": "oauth_state_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

@@ -8,7 +8,7 @@ import type {
 } from "@atproto/oauth-client-node";
 import { eq, lt } from "drizzle-orm";
 import { decrypt, encrypt } from "@/lib/crypto";
-import { getDb, getPool } from "@/lib/db";
+import { getDb, withLock } from "@/lib/db";
 import { oauthSession, oauthState } from "@/lib/db/schema";
 
 const STATE_TTL_MS = 60 * 60 * 1000;
@@ -62,19 +62,7 @@ export const sessionStore: NodeSavedSessionStore = {
 };
 
 /**
- * Cross-instance lock (Postgres advisory lock) so two Cloud Run instances
- * never refresh the same session's tokens at once.
+ * Cross-instance lock so two Cloud Run instances never refresh the same
+ * session's tokens at once.
  */
-export const requestLock: RuntimeLock = async (name, fn) => {
-  const pool = await getPool();
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SET LOCAL lock_timeout = '30s'");
-    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [name]);
-    return await fn();
-  } finally {
-    await client.query("COMMIT").catch(() => {});
-    client.release();
-  }
-};
+export const requestLock: RuntimeLock = (name, fn) => withLock(name, async () => fn());

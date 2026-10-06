@@ -157,6 +157,6 @@ a {
   border: none;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--bg);
   cursor: pointer;
 }

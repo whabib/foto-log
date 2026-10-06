@@ -48,3 +48,21 @@ export function getPool(): Promise<Pool> {
 export async function getDb(): Promise<Db> {
   return drizzle(await getPool(), { schema });
 }
+
+/**
+ * Runs `fn` while holding a Postgres advisory lock named `name`, so only one
+ * Cloud Run instance at a time runs code under the same lock name.
+ */
+export async function withLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL lock_timeout = '30s'");
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [name]);
+    return await fn();
+  } finally {
+    await client.query("COMMIT").catch(() => {});
+    client.release();
+  }
+}

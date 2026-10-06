@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const { session } = await client.callback(params);
     const handle = await lookupHandle(session);
     const cookie = await createUserSession(session.did, handle);
+    if (!cookie) return redirectTo("/login?error=failed");
     const response = redirectTo("/");
     response.cookies.set(SESSION_COOKIE, cookie, sessionCookieOptions);
     return response;

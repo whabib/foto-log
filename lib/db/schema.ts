@@ -1,11 +1,15 @@
 import { index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 /** In-progress OAuth authorizations. Values are encrypted; rows expire after an hour. */
-export const oauthState = pgTable("oauth_state", {
-  key: text("key").primaryKey(),
-  value: text("value").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const oauthState = pgTable(
+  "oauth_state",
+  {
+    key: text("key").primaryKey(),
+    value: text("value").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("oauth_state_created_at_idx").on(t.createdAt)],
+);
 
 /** OAuth token sets (and DPoP keys), one per account DID. Values are encrypted. */
 export const oauthSession = pgTable("oauth_session", {

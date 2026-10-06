@@ -18,4 +18,5 @@ CREATE TABLE "user_session" (
 	"expires_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
+CREATE INDEX "oauth_state_created_at_idx" ON "oauth_state" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "user_session_did_idx" ON "user_session" USING btree ("did");

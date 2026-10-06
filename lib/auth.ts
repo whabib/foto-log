@@ -4,8 +4,8 @@ import { and, eq, gt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { isProduction } from "@/lib/config";
 import { randomId, sign, unsign } from "@/lib/crypto";
-import { getDb } from "@/lib/db";
-import { userSession } from "@/lib/db/schema";
+import { getDb, withLock } from "@/lib/db";
+import { oauthSession, userSession } from "@/lib/db/schema";
 import { getOAuthClient } from "@/lib/oauth/client";
 
 // "__Host-" cookies must be Secure, so dev (plain http) uses a plain name.
@@ -40,17 +40,34 @@ export async function lookupHandle(session: OAuthSession): Promise<string | null
   }
 }
 
-/** Creates a browser session for `did` and returns the signed cookie value. */
-export async function createUserSession(did: string, handle: string | null): Promise<string> {
-  const db = await getDb();
-  const id = randomId();
-  await db.insert(userSession).values({
-    id,
-    did,
-    handle,
-    expiresAt: new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000),
+/**
+ * Browser-session changes for one account run under this lock, so a sign-out
+ * in one browser can't revoke tokens that a sign-in elsewhere just stored.
+ */
+const accountLock = (did: string) => `account:${did}`;
+
+/**
+ * Creates a browser session for `did` and returns the signed cookie value.
+ * Returns null if the account's OAuth session is gone (for example, revoked
+ * by a sign-out that ran between token exchange and this call).
+ */
+export async function createUserSession(did: string, handle: string | null): Promise<string | null> {
+  return withLock(accountLock(did), async () => {
+    const db = await getDb();
+    const [tokens] = await db
+      .select({ sub: oauthSession.sub })
+      .from(oauthSession)
+      .where(eq(oauthSession.sub, did));
+    if (!tokens) return null;
+    const id = randomId();
+    await db.insert(userSession).values({
+      id,
+      did,
+      handle,
+      expiresAt: new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000),
+    });
+    return sign(id);
   });
-  return sign(id);
 }
 
 async function currentSessionId(): Promise<string | null> {
@@ -79,17 +96,24 @@ export async function endUserSession(): Promise<void> {
   (await cookies()).delete(SESSION_COOKIE);
   if (!id) return;
   const db = await getDb();
-  const [row] = await db.delete(userSession).where(eq(userSession.id, id)).returning();
-  if (!row) return;
-  const others = await db
-    .select({ id: userSession.id })
+  const [session] = await db
+    .select({ did: userSession.did })
     .from(userSession)
-    .where(and(eq(userSession.did, row.did), gt(userSession.expiresAt, new Date())))
-    .limit(1);
-  if (others.length === 0) {
-    const client = await getOAuthClient();
-    await client.revoke(row.did).catch((err) => {
-      console.warn("OAuth revoke failed", { did: row.did, err });
-    });
-  }
+    .where(eq(userSession.id, id));
+  if (!session) return;
+  const { did } = session;
+  await withLock(accountLock(did), async () => {
+    await db.delete(userSession).where(eq(userSession.id, id));
+    const others = await db
+      .select({ id: userSession.id })
+      .from(userSession)
+      .where(and(eq(userSession.did, did), gt(userSession.expiresAt, new Date())))
+      .limit(1);
+    if (others.length === 0) {
+      const client = await getOAuthClient();
+      await client.revoke(did).catch((err) => {
+        console.warn("OAuth revoke failed", { did, err });
+      });
+    }
+  });
 }
