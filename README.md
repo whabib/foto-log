@@ -1,6 +1,6 @@
 # foto-log
 
-A revival of [Fotolog.com](https://en.wikipedia.org/wiki/Fotolog), the photoblogging site of the late 2000s, rebuilt on the [AT Protocol](https://atproto.com) so it has a better chance of surviving than the original did.
+A revival of [Fotolog.com](https://en.wikipedia.org/wiki/Fotolog), the late-2000s site where everyone kept a fotolog, rebuilt on the [AT Protocol](https://atproto.com) so it has a better chance of surviving than the original did.
 
 Hosted at **[foto-log.com](https://foto-log.com)**.
 
