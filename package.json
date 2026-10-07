@@ -7,19 +7,27 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "lex:gen": "lex gen-api --yes lib/lexicon $(find lexicons -name \"*.json\" | sort)"
   },
   "dependencies": {
+    "@atproto/api": "^0.23.1",
+    "@atproto/lexicon": "^0.7.16",
+    "@atproto/syntax": "^0.7.6",
+    "multiformats": "^13.4.2",
     "next": "16.3.8",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@types/node": "^20",
+    "@atproto/lex-cli": "^0.10.15",
+    "@types/node": "^24.19.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.3"
   }
 }

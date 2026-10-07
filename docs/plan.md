@@ -11,9 +11,19 @@ Revive Fotolog.com, where each user keeps a fotolog (one photo a day, a caption,
 - **Naming:** a user's photo blog is always called a **fotolog**, never a "photoblog", in UI copy, docs and code.
 - **Stack:** TypeScript, Next.js (App Router, standalone output), `@atproto/api`, `@atproto/oauth-client-node`, Postgres via Drizzle.
 - **Hosting:** Cloud Run (`foto-log-web`, us-central1) in GCP project `foto-log-app`, behind a global external HTTPS load balancer.
-- **Lexicon:** `com.foto-log.photo`, with record key = `uploadDate` (`YYYY-MM-DD`).
-- **One photo per day.** Each photo has an upload date and a display date. In v1 they are always the same; letting users change the display date (for example, several photos from one event) is deferred because of how it affects feed ordering.
+- **Lexicon:** `com.foto-log.photo`, with record key `YYYY-MM-DD-NN` (upload date plus a two-digit sequence). See Data model.
+- **One photo per day, for now.** The limit is a per-account setting (default 1) enforced by the app, not built into the record key, so allowing more photos per day later (for example, a paid tier) only means raising the limit. Each photo has an upload date and a display date. In v1 they are always the same; letting users change the display date (for example, several photos from one event) is deferred because of how it affects feed ordering.
 - **Tracking:** GitHub Issues with the `v1` milestone.
+
+## Data model
+
+Each photo is a `com.foto-log.photo` record in the poster's own repo. Full schema: [lexicon.md](lexicon.md).
+
+- **Record key:** `YYYY-MM-DD-NN`: the upload date in the poster's time zone plus a sequence number for that day (`01`-`99`). While the daily limit is 1, it's always `-01`, e.g. `2026-10-06-01`.
+- **uploadDate** is stored as its own field, as well as in the key.
+- **displayDate** equals uploadDate in v1.
+- **Daily limit:** before posting, the app counts the account's records for that date against its limit (default 1) and uses the next free sequence number. With a limit of 1, that's a single `getRecord` for `YYYY-MM-DD-01`.
+- Each photo also creates an `app.bsky.feed.post` (referenced by `post`). Replies to it form the photo's guestbook.
 
 ## v1 work items
 

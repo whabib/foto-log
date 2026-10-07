@@ -1,0 +1,73 @@
+{
+  "lexicon": 1,
+  "id": "com.foto-log.photo",
+  "description": "A daily photo on a foto-log.com fotolog.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "One photo on a fotolog. The record key is the uploadDate followed by a two-digit sequence number for that day, YYYY-MM-DD-NN (NN from 01 to 99), e.g. 2026-10-06-01. How many photos an account may post per day is decided by the app, not by this schema.",
+      "key": "any",
+      "record": {
+        "type": "object",
+        "required": ["post", "image", "uploadDate", "displayDate", "timeZone", "createdAt"],
+        "properties": {
+          "post": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "The app.bsky.feed.post that shares this photo. Replies to it are the photo's guestbook."
+          },
+          "image": {
+            "type": "blob",
+            "accept": ["image/*"],
+            "maxSize": 1000000
+          },
+          "alt": {
+            "type": "string",
+            "description": "Alt text describing the image.",
+            "maxLength": 10000,
+            "maxGraphemes": 1000
+          },
+          "aspectRatio": {
+            "type": "ref",
+            "ref": "#aspectRatio"
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 3000,
+            "maxGraphemes": 300
+          },
+          "uploadDate": {
+            "type": "string",
+            "description": "Calendar date (YYYY-MM-DD) the photo was posted, in the poster's time zone. The record key starts with this date.",
+            "minLength": 10,
+            "maxLength": 10
+          },
+          "displayDate": {
+            "type": "string",
+            "description": "Calendar date (YYYY-MM-DD) the photo is shown under. Always equals uploadDate for now.",
+            "minLength": 10,
+            "maxLength": 10
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "IANA time zone name of the poster when the photo was posted, e.g. America/New_York.",
+            "maxLength": 64
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    },
+    "aspectRatio": {
+      "type": "object",
+      "description": "Width and height of the image. Only the ratio matters.",
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}
