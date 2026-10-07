@@ -46,3 +46,11 @@ jobs:
             --region="$REGION" \
             --image="$IMAGE:${{ github.sha }}" \
             --quiet
+          # A --no-traffic deploy (used to test a PR revision) pins traffic to
+          # a fixed revision, and later deploys keep the pin. Always serve
+          # the revision just deployed.
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-latest \
+            --quiet

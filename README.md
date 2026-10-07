@@ -20,12 +20,18 @@ foto-log keeps the same one-photo-a-day rhythm, but posts are stored as records 
 
 ## Development
 
+Needs Node 24 and Docker.
+
 ```sh
 npm install
-npm run dev        # http://localhost:3000
+npm run db:up      # local Postgres on 127.0.0.1:54329
+npm run dev        # http://127.0.0.1:3000 (use 127.0.0.1, not localhost, so sign-in cookies work)
+npm test
 npm run lint
 npm run typecheck
 npm run build
 ```
 
-Merges to `main` deploy to Cloud Run automatically. See [docs/infra.md](docs/infra.md) and [docs/plan.md](docs/plan.md).
+Local dev needs no secrets. Sign-in uses an ATProto loopback OAuth client, so you can sign in with a real Bluesky (or other ATProto) account against your local server. Migrations in `drizzle/` run automatically when the server starts. After changing `lib/db/schema.ts`, run `npm run db:generate` to add a migration.
+
+Merges to `main` deploy to Cloud Run automatically. See [docs/infra.md](docs/infra.md), [docs/auth.md](docs/auth.md), [docs/lexicon.md](docs/lexicon.md) and [docs/plan.md](docs/plan.md).

@@ -9,22 +9,33 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "lex:gen": "lex gen-api --yes lib/lexicon $(find lexicons -name \"*.json\" | sort)"
+    "lex:gen": "lex gen-api --yes lib/lexicon $(find lexicons -name \"*.json\" | sort)",
+    "db:generate": "drizzle-kit generate",
+    "db:up": "docker compose up -d db"
   },
   "dependencies": {
     "@atproto/api": "^0.23.1",
+    "@atproto/jwk-jose": "^0.2.4",
     "@atproto/lexicon": "^0.7.16",
+    "@atproto/oauth-client-node": "^0.5.9",
     "@atproto/syntax": "^0.7.6",
+    "@google-cloud/cloud-sql-connector": "^1.12.0",
+    "drizzle-orm": "^0.45.3",
     "multiformats": "^13.4.2",
     "next": "16.3.8",
+    "pg": "^8.23.1",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@atproto/lex-cli": "^0.10.15",
+    "@atproto/oauth-scopes": "^0.5.13",
     "@types/node": "^24.19.1",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "typescript": "^5",

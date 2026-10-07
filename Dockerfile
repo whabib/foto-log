@@ -22,6 +22,7 @@ RUN addgroup -S app && adduser -S app -G app
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static
 COPY --from=build --chown=app:app /app/public ./public
+COPY --from=build --chown=app:app /app/drizzle ./drizzle
 USER app
 EXPOSE 8080
 CMD ["node", "server.js"]
