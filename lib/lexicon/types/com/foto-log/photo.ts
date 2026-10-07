@@ -23,7 +23,7 @@ export interface Main {
   alt?: string
   aspectRatio?: AspectRatio
   caption?: string
-  /** Calendar date (YYYY-MM-DD) the photo was posted, in the poster's time zone. Also the record key. */
+  /** Calendar date (YYYY-MM-DD) the photo was posted, in the poster's time zone. The record key starts with this date. */
   uploadDate: string
   /** Calendar date (YYYY-MM-DD) the photo is shown under. Always equals uploadDate for now. */
   displayDate: string

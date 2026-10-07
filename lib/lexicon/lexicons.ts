@@ -437,7 +437,7 @@ export const schemaDict = {
       main: {
         type: 'record',
         description:
-          "One photo for one day. The record key is the uploadDate (YYYY-MM-DD) in the poster's time zone, so there is at most one record per day.",
+          'One photo on a fotolog. The record key is the uploadDate followed by a two-digit sequence number for that day, YYYY-MM-DD-NN (NN from 01 to 99), e.g. 2026-10-06-01. How many photos an account may post per day is decided by the app, not by this schema.',
         key: 'any',
         record: {
           type: 'object',
@@ -479,7 +479,7 @@ export const schemaDict = {
             uploadDate: {
               type: 'string',
               description:
-                "Calendar date (YYYY-MM-DD) the photo was posted, in the poster's time zone. Also the record key.",
+                "Calendar date (YYYY-MM-DD) the photo was posted, in the poster's time zone. The record key starts with this date.",
               minLength: 10,
               maxLength: 10,
             },

@@ -9,6 +9,9 @@ import {
   dateKeyFor,
   isValidDateKey,
   isValidTimeZone,
+  nextPhotoRecordKey,
+  parsePhotoRecordKey,
+  photoRecordKey,
   type PhotoRecordInput,
 } from "./photo-record";
 
@@ -102,12 +105,54 @@ describe("isValidTimeZone", () => {
   });
 });
 
+describe("photo record keys", () => {
+  it("formats the date and a two-digit sequence", () => {
+    expect(photoRecordKey("2026-10-06", 1)).toBe("2026-10-06-01");
+    expect(photoRecordKey("2026-10-06", 12)).toBe("2026-10-06-12");
+    expect(photoRecordKey("2026-10-06", 99)).toBe("2026-10-06-99");
+  });
+
+  it("rejects sequences outside 1-99 and bad dates", () => {
+    for (const seq of [0, 100, -1, 1.5]) {
+      expect(() => photoRecordKey("2026-10-06", seq), String(seq)).toThrow(RangeError);
+    }
+    expect(() => photoRecordKey("2026-02-30", 1)).toThrow(RangeError);
+  });
+
+  it("parses keys back into date and sequence", () => {
+    expect(parsePhotoRecordKey("2026-10-06-01")).toEqual({ uploadDate: "2026-10-06", sequence: 1 });
+    expect(parsePhotoRecordKey("2026-10-06-42")).toEqual({ uploadDate: "2026-10-06", sequence: 42 });
+  });
+
+  it.each(["2026-10-06", "2026-10-06-00", "2026-10-06-1", "2026-10-06-001", "2026-02-30-01", "x2026-10-06-01", ""])(
+    "won't parse %j",
+    (k) => {
+      expect(parsePhotoRecordKey(k)).toBeNull();
+    },
+  );
+
+  it("gives -01 for the first photo of the day under the default limit of 1", () => {
+    expect(nextPhotoRecordKey("2026-10-06", [])).toBe("2026-10-06-01");
+  });
+
+  it("returns null once the daily limit is reached", () => {
+    expect(nextPhotoRecordKey("2026-10-06", [1])).toBeNull();
+    expect(nextPhotoRecordKey("2026-10-06", [1, 2, 3], 3)).toBeNull();
+  });
+
+  it("takes the next free sequence when the limit is higher", () => {
+    expect(nextPhotoRecordKey("2026-10-06", [1], 3)).toBe("2026-10-06-02");
+    // A deleted photo frees its number.
+    expect(nextPhotoRecordKey("2026-10-06", [1, 3], 3)).toBe("2026-10-06-02");
+  });
+});
+
 describe("buildPhotoRecord", () => {
   it("builds a valid record keyed by the local upload date", () => {
     const { rkey, record } = buildPhotoRecord(
       input({ now: new Date("2026-10-06T02:00:00Z"), timeZone: "America/Los_Angeles" }),
     );
-    expect(rkey).toBe("2026-10-05");
+    expect(rkey).toBe("2026-10-05-01");
     expect(record).toMatchObject({
       $type: "com.foto-log.photo",
       uploadDate: "2026-10-05",
@@ -116,6 +161,11 @@ describe("buildPhotoRecord", () => {
       createdAt: "2026-10-06T02:00:00.000Z",
       caption: "Sunset at the pier",
     });
+  });
+
+  it("uses the given sequence number in the record key", () => {
+    expect(buildPhotoRecord(input({ sequence: 2 })).rkey).toBe("2026-10-06-02");
+    expect(() => buildPhotoRecord(input({ sequence: 0 }))).toThrow(RangeError);
   });
 
   it("includes alt and aspectRatio when given, and omits empty optionals", () => {
@@ -170,35 +220,47 @@ describe("assertValidPhotoRecord", () => {
   const good = () => buildPhotoRecord(input()).record;
 
   it("accepts a record built by buildPhotoRecord", () => {
-    expect(() => assertValidPhotoRecord("2026-10-06", good())).not.toThrow();
+    expect(() => assertValidPhotoRecord("2026-10-06-01", good())).not.toThrow();
   });
 
+  it("accepts any sequence from 01 to 99 for the record's date", () => {
+    expect(() => assertValidPhotoRecord("2026-10-06-02", good())).not.toThrow();
+    expect(() => assertValidPhotoRecord("2026-10-06-99", good())).not.toThrow();
+  });
+
+  it.each(["2026-10-06", "2026-10-06-00", "2026-10-06-1", "2026-10-06-100", "2026-10-06-ab"])(
+    "rejects the malformed record key %s",
+    (rkey) => {
+      expect(() => assertValidPhotoRecord(rkey, good())).toThrow(/Invalid record key/);
+    },
+  );
+
   it("rejects a record key that differs from uploadDate", () => {
-    expect(() => assertValidPhotoRecord("2026-10-07", good())).toThrow(/Record key/);
+    expect(() => assertValidPhotoRecord("2026-10-07-01", good())).toThrow(/Record key/);
   });
 
   it("rejects displayDate different from uploadDate (v1 rule)", () => {
     expect(() =>
-      assertValidPhotoRecord("2026-10-06", { ...good(), displayDate: "2026-10-01" }),
+      assertValidPhotoRecord("2026-10-06-01", { ...good(), displayDate: "2026-10-01" }),
     ).toThrow(/displayDate/);
   });
 
   it("rejects impossible dates", () => {
     const r = { ...good(), uploadDate: "2026-02-30", displayDate: "2026-02-30" };
-    expect(() => assertValidPhotoRecord("2026-02-30", r)).toThrow(/uploadDate/);
+    expect(() => assertValidPhotoRecord("2026-02-30-01", r)).toThrow(/uploadDate/);
   });
 
   it("rejects missing required fields", () => {
     for (const field of ["post", "image", "uploadDate", "displayDate", "timeZone", "createdAt"]) {
       const r: Record<string, unknown> = { ...good() };
       delete r[field];
-      expect(() => assertValidPhotoRecord("2026-10-06", r), field).toThrow();
+      expect(() => assertValidPhotoRecord("2026-10-06-01", r), field).toThrow();
     }
   });
 
   it("rejects a createdAt that isn't a datetime", () => {
     expect(() =>
-      assertValidPhotoRecord("2026-10-06", { ...good(), createdAt: "yesterday" }),
+      assertValidPhotoRecord("2026-10-06-01", { ...good(), createdAt: "yesterday" }),
     ).toThrow(/createdAt/);
   });
 });

@@ -41,7 +41,7 @@ export function isValidDateKey(key: string): boolean {
 
 /**
  * The calendar date (YYYY-MM-DD) of `instant` as seen in `timeZone`.
- * This is the record key and uploadDate of a photo posted at that instant.
+ * This is the uploadDate of a photo posted at that instant.
  */
 export function dateKeyFor(instant: Date, timeZone: string): string {
   if (!isValidTimeZone(timeZone)) {
@@ -60,6 +60,56 @@ export function dateKeyFor(instant: Date, timeZone: string): string {
   return `${get("year").padStart(4, "0")}-${get("month")}-${get("day")}`;
 }
 
+/** Default number of photos an account may post per day. */
+export const DEFAULT_DAILY_PHOTO_LIMIT = 1;
+
+const MAX_SEQUENCE = 99;
+const RECORD_KEY_RE = /^(\d{4}-\d{2}-\d{2})-(\d{2})$/;
+
+/**
+ * The record key for the `sequence`-th photo of `uploadDate`, e.g.
+ * "2026-10-06-01". Sequence numbers run from 1 to 99.
+ */
+export function photoRecordKey(uploadDate: string, sequence: number): string {
+  if (!isValidDateKey(uploadDate)) {
+    throw new RangeError(`Invalid upload date: ${uploadDate}`);
+  }
+  if (!Number.isInteger(sequence) || sequence < 1 || sequence > MAX_SEQUENCE) {
+    throw new RangeError(`Sequence must be 1-${MAX_SEQUENCE}, got ${sequence}`);
+  }
+  return `${uploadDate}-${String(sequence).padStart(2, "0")}`;
+}
+
+/** Splits a record key like "2026-10-06-01" into its date and sequence, or null if malformed. */
+export function parsePhotoRecordKey(
+  rkey: string,
+): { uploadDate: string; sequence: number } | null {
+  const m = RECORD_KEY_RE.exec(rkey);
+  if (!m || !isValidDateKey(m[1])) return null;
+  const sequence = Number(m[2]);
+  if (sequence < 1 || sequence > MAX_SEQUENCE) return null;
+  return { uploadDate: m[1], sequence };
+}
+
+/**
+ * The record key for a new photo on `uploadDate`, given the sequence numbers
+ * already used that day, or null if the account has reached its daily
+ * limit. The limit is enforced here in the app, not by the key format; a
+ * higher limit just takes the next free sequence number.
+ */
+export function nextPhotoRecordKey(
+  uploadDate: string,
+  usedSequences: Iterable<number>,
+  dailyLimit = DEFAULT_DAILY_PHOTO_LIMIT,
+): string | null {
+  const used = new Set(usedSequences);
+  if (used.size >= dailyLimit) return null;
+  for (let seq = 1; seq <= Math.min(dailyLimit, MAX_SEQUENCE); seq++) {
+    if (!used.has(seq)) return photoRecordKey(uploadDate, seq);
+  }
+  return null;
+}
+
 export type PhotoRecordInput = {
   post: ComAtprotoRepoStrongRef.Main;
   image: BlobRef;
@@ -70,6 +120,8 @@ export type PhotoRecordInput = {
   now: Date;
   /** The poster's IANA time zone. */
   timeZone: string;
+  /** Which photo of the day this is (1-99). Always 1 while the daily limit is 1. */
+  sequence?: number;
 };
 
 export type PhotoRecord = Photo.Record;
@@ -102,14 +154,16 @@ export function buildPhotoRecord(input: PhotoRecordInput): {
     timeZone: input.timeZone,
     createdAt: input.now.toISOString(),
   };
-  assertValidPhotoRecord(uploadDate, record);
-  return { rkey: uploadDate, record };
+  const rkey = photoRecordKey(uploadDate, input.sequence ?? 1);
+  assertValidPhotoRecord(rkey, record);
+  return { rkey, record };
 }
 
 /**
  * Throws unless `record` is a valid com.foto-log.photo record for `rkey`:
- * it must pass the lexicon, use real calendar dates, have a known time zone,
- * and (in v1) have rkey === uploadDate === displayDate.
+ * it must pass the lexicon, use real calendar dates and a known time zone,
+ * have a key of the form `<uploadDate>-NN` (NN = 01-99), and (in v1) have
+ * displayDate === uploadDate.
  */
 export function assertValidPhotoRecord(
   rkey: string,
@@ -132,8 +186,12 @@ export function assertValidPhotoRecord(
   if (!isValidDateKey(r.displayDate)) {
     throw new Error(`Invalid displayDate: ${r.displayDate}`);
   }
-  if (rkey !== r.uploadDate) {
-    throw new Error(`Record key ${rkey} must equal uploadDate ${r.uploadDate}`);
+  const key = parsePhotoRecordKey(rkey);
+  if (!key) {
+    throw new Error(`Invalid record key ${rkey}: expected YYYY-MM-DD-NN with NN from 01 to 99`);
+  }
+  if (key.uploadDate !== r.uploadDate) {
+    throw new Error(`Record key ${rkey} doesn't match uploadDate ${r.uploadDate}`);
   }
   if (r.displayDate !== r.uploadDate) {
     throw new Error("displayDate must equal uploadDate");
