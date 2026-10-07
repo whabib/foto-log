@@ -53,7 +53,8 @@ All were generated directly into Secret Manager and never written to disk. Only 
 ## CI/CD
 
 - `.github/workflows/ci.yml`: on every PR, runs lint, typecheck and build.
-- `.github/workflows/deploy.yml`: on push to `main`, builds the image, tags it with the commit SHA, pushes it, and deploys it to Cloud Run.
+- `.github/workflows/deploy.yml`: on push to `main`, builds the image, tags it with the commit SHA, pushes it, deploys it to Cloud Run, and routes 100% of traffic to the new revision (`update-traffic --to-latest`).
+- To try a PR on the real domain before merging, deploy it with `--no-traffic --tag=prNN`, then `gcloud run services update-traffic foto-log-web --to-tags=prNN=100`. The next merge to `main` moves traffic back to the latest revision.
 - GitHub Actions authenticates with Workload Identity Federation, not JSON keys:
   - Pool `github`, provider `github`, restricted to repository ID `1406276002` (whabib/foto-log) and owner ID `779276`.
   - It impersonates `github-deployer@foto-log-app.iam.gserviceaccount.com`, which has `roles/run.developer` on the project, `roles/artifactregistry.writer` on the `foto-log` repo, and `roles/iam.serviceAccountUser` on the runtime service account only.
