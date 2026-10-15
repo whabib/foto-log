@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const MAX_EDGE = 2000;
 const TARGET_BYTES = 950_000;
@@ -69,6 +69,8 @@ export default function PostForm({ maxCaption }: { maxCaption: number }) {
   const [preparing, setPreparing] = useState(false);
   const [caption, setCaption] = useState("");
   const [alt, setAlt] = useState("");
+  // Bumped on each new pick, so a slow, superseded preparation is ignored.
+  const pickId = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,16 +93,26 @@ export default function PostForm({ maxCaption }: { maxCaption: number }) {
   );
 
   async function onFile(file: File | undefined) {
+    const id = ++pickId.current;
     setPhoto(null);
-    if (!file) return;
+    if (!file) {
+      setPreparing(false);
+      return;
+    }
     setPreparing(true);
     try {
-      setPhoto(await prepareImage(file));
+      const prepared = await prepareImage(file);
+      if (id !== pickId.current) {
+        URL.revokeObjectURL(prepared.url);
+        return;
+      }
+      setPhoto(prepared);
       if (status.kind === "error") setStatus({ kind: "ready" });
     } catch {
+      if (id !== pickId.current) return;
       setStatus({ kind: "error", message: "We couldn't read that image. Please try a different photo." });
     } finally {
-      setPreparing(false);
+      if (id === pickId.current) setPreparing(false);
     }
   }
 
@@ -164,7 +176,7 @@ export default function PostForm({ maxCaption }: { maxCaption: number }) {
         type="file"
         accept="image/*"
         onChange={(e) => onFile(e.target.files?.[0])}
-        disabled={status.kind === "posting"}
+        disabled={preparing || status.kind === "posting"}
       />
       {preparing && <p className="hint">Preparing photo…</p>}
       {photo && (

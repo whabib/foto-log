@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { photoUrlFor } from "@/lib/photos/server";
+import { currentIdentity, photoUrlFor } from "@/lib/photos/server";
 import { maxCaptionGraphemes } from "@/lib/photos/text";
 import PostForm from "./PostForm";
 
@@ -11,7 +11,7 @@ export default async function PostPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   // The link's length doesn't depend on which date it is.
-  const maxCaption = maxCaptionGraphemes(photoUrlFor(user, "2000-01-01"));
+  const maxCaption = maxCaptionGraphemes(photoUrlFor(await currentIdentity(user), "2000-01-01"));
   return (
     <main className="post-page">
       <h1>Post today&apos;s photo</h1>

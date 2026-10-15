@@ -4,6 +4,7 @@ import type { CurrentUser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { resolveActor, type Actor } from "@/lib/identity";
 import { getOAuthClient } from "@/lib/oauth/client";
+import { fetchFromPds } from "@/lib/safe-fetch";
 import {
   assertValidPhotoRecord,
   buildPhotoRecord,
@@ -73,12 +74,30 @@ async function recordExists(agent: Agent, did: string, collection: string, rkey:
   }
 }
 
-/** The page URL for `user`'s photo on `uploadDate`. */
-export function photoUrlFor(user: CurrentUser, uploadDate: string): string {
-  return `${baseUrl}${photoPath(user, uploadDate)}`;
+/** Lexicon byte limits (UTF-8), which can bind before the grapheme limits. */
+const MAX_POST_TEXT_BYTES = 3000;
+const MAX_CAPTION_BYTES = 3000;
+const MAX_ALT_BYTES = 10_000;
+const utf8Length = (s: string) => new TextEncoder().encode(s).length;
+
+export type Identity = { did: string; handle: string | null };
+
+/**
+ * The user's current verified handle, looked up fresh rather than taken
+ * from the session (the handle may have changed since sign-in). Falls back
+ * to DID-based URLs if it can't be verified.
+ */
+export async function currentIdentity(user: CurrentUser): Promise<Identity> {
+  const actor = await resolveActor(user.did);
+  return { did: user.did, handle: actor?.handle ?? null };
 }
 
-export function validatePhotoInput(user: CurrentUser, input: PhotoInput, uploadDate: string) {
+/** The page URL for a photo on `uploadDate`. */
+export function photoUrlFor(identity: Identity, uploadDate: string): string {
+  return `${baseUrl}${photoPath(identity, uploadDate)}`;
+}
+
+export function validatePhotoInput(identity: Identity, input: PhotoInput, uploadDate: string) {
   if (!ACCEPTED_TYPES.has(input.mimeType)) {
     throw new PhotoError("invalid", "Please choose a JPEG, PNG or WebP image.");
   }
@@ -93,11 +112,20 @@ export function validatePhotoInput(user: CurrentUser, input: PhotoInput, uploadD
   if (!isValidTimeZone(input.timeZone)) {
     throw new PhotoError("invalid", "We couldn't tell your time zone. Please try again.");
   }
-  const maxCaption = maxCaptionGraphemes(photoUrlFor(user, uploadDate));
-  if (graphemeLength(input.caption.trim()) > maxCaption) {
+  const photoUrl = photoUrlFor(identity, uploadDate);
+  const caption = input.caption.trim();
+  const maxCaption = maxCaptionGraphemes(photoUrl);
+  if (graphemeLength(caption) > maxCaption) {
     throw new PhotoError("invalid", `Captions can be up to ${maxCaption} characters.`);
   }
-  if (graphemeLength(input.alt) > MAX_ALT_GRAPHEMES) {
+  if (
+    utf8Length(caption) > MAX_CAPTION_BYTES ||
+    utf8Length(buildPostText(caption, photoUrl).text) > MAX_POST_TEXT_BYTES
+  ) {
+    throw new PhotoError("invalid", "That caption is too long. Try a shorter one or fewer emoji.");
+  }
+  const alt = input.alt.trim();
+  if (graphemeLength(alt) > MAX_ALT_GRAPHEMES || utf8Length(alt) > MAX_ALT_BYTES) {
     throw new PhotoError("invalid", `Alt text can be up to ${MAX_ALT_GRAPHEMES} characters.`);
   }
 }
@@ -110,8 +138,9 @@ export function validatePhotoInput(user: CurrentUser, input: PhotoInput, uploadD
 export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<string> {
   const now = new Date();
   const uploadDate = isValidTimeZone(input.timeZone) ? dateKeyFor(now, input.timeZone) : "";
-  validatePhotoInput(user, input, uploadDate);
-  const path = photoPath(user, uploadDate);
+  const identity = await currentIdentity(user);
+  validatePhotoInput(identity, input, uploadDate);
+  const path = photoPath(identity, uploadDate);
 
   const agent = await agentFor(user.did);
   // One photo a day for now: the only possible key is -01.
@@ -164,6 +193,29 @@ export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<s
       record,
     });
   } catch (err) {
+    // The write may have succeeded with the response lost, or failed because
+    // another upload took this key. Read back before deleting anything.
+    let savedPostUri: string | undefined;
+    let saved = false;
+    try {
+      const { data } = await agent.com.atproto.repo.getRecord({
+        repo: user.did,
+        collection: PHOTO_COLLECTION,
+        rkey,
+      });
+      saved = true;
+      savedPostUri = (data.value as { post?: { uri?: unknown } }).post?.uri as string | undefined;
+    } catch (readErr) {
+      if (errorName(readErr) !== "RecordNotFound") {
+        console.error("Photo write outcome unknown; keeping the Bluesky post", {
+          uri: post.uri,
+          err,
+          readErr,
+        });
+        throw err;
+      }
+    }
+    if (savedPostUri === post.uri) return path; // it was saved after all
     const postRkey = post.uri.split("/").pop()!;
     await agent.com.atproto.repo
       .deleteRecord({ repo: user.did, collection: POST_COLLECTION, rkey: postRkey })
@@ -173,7 +225,7 @@ export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<s
           cleanupErr,
         }),
       );
-    if (await recordExists(agent, user.did, PHOTO_COLLECTION, rkey).catch(() => false)) {
+    if (saved) {
       throw new PhotoError("already_posted", "You've already posted a photo today.", path);
     }
     throw err;
@@ -188,7 +240,7 @@ export async function todaysPhotoPath(user: CurrentUser, timeZone: string): Prom
   const actor = await resolveActor(user.did);
   if (!actor) return null;
   const photo = await fetchPhoto(actor, photoRecordKey(uploadDate, 1));
-  return photo ? photoPath(user, uploadDate) : null;
+  return photo ? photoPath(actor, uploadDate) : null;
 }
 
 export type StoredPhoto = { uri: string; cid: string; rkey: string; record: PhotoRecord };
@@ -199,9 +251,15 @@ export async function fetchPhoto(actor: Actor, rkey: string): Promise<StoredPhot
   url.searchParams.set("repo", actor.did);
   url.searchParams.set("collection", PHOTO_COLLECTION);
   url.searchParams.set("rkey", rkey);
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000), cache: "no-store" });
-  if (!res.ok) return null;
-  const body = (await res.json()) as { uri: string; cid: string; value: unknown };
+  let body: { uri: string; cid: string; value: unknown };
+  try {
+    const res = await fetchFromPds(url);
+    if (!res.ok) return null;
+    body = await res.json();
+  } catch (err) {
+    console.warn("Couldn't read photo from PDS", { did: actor.did, rkey, err });
+    return null;
+  }
   try {
     const { jsonToLex } = await import("@atproto/lexicon");
     const record = jsonToLex(body.value);
