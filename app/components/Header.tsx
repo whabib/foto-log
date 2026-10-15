@@ -11,6 +11,7 @@ export default async function Header() {
       </Link>
       {user ? (
         <form action={signOut} className="account">
+          <Link href="/post">Post a photo</Link>
           <span>
             Signed in as <strong>{user.handle ? `@${user.handle}` : user.did}</strong>
           </span>
