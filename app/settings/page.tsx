@@ -32,6 +32,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         <p className="muted">How your Fotolog looks to everyone who visits it.</p>
         {reset && <p className="notice-inline">Your member page is back to the defaults.</p>}
         <SettingsForm
+          // The form keeps its own state, so remount it after a reset.
+          key={typeof reset === "string" ? reset : "settings"}
           initial={{
             title: s.title ?? "",
             country: s.country ?? "",

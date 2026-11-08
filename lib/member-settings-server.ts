@@ -3,17 +3,17 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { memberSettings } from "@/lib/db/schema";
 import type { MemberSettings } from "@/lib/member-settings";
+import { TtlCache } from "@/lib/ttl-cache";
 
 // Member pages are public and read often; settings change rarely. Cache
 // reads briefly per instance. Saves on this instance clear the entry; other
 // instances catch up within the TTL.
-const CACHE_TTL_MS = 30_000;
-const cache = new Map<string, { value: MemberSettings | null; expires: number }>();
+const cache = new TtlCache<string, MemberSettings | null>(30_000, 1000);
 
 /** A member's saved settings, or null if they've never saved any. No login needed. */
 export async function getMemberSettings(did: string): Promise<MemberSettings | null> {
   const hit = cache.get(did);
-  if (hit && hit.expires > Date.now()) return hit.value;
+  if (hit) return hit.value;
   const db = await getDb();
   const [row] = await db.select().from(memberSettings).where(eq(memberSettings.did, did));
   const value: MemberSettings | null = row
@@ -26,7 +26,7 @@ export async function getMemberSettings(did: string): Promise<MemberSettings | n
         textColor: row.textColor,
       }
     : null;
-  cache.set(did, { value, expires: Date.now() + CACHE_TTL_MS });
+  cache.set(did, value);
   return value;
 }
 

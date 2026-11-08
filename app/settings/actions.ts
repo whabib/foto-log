@@ -39,5 +39,6 @@ export async function resetSettings() {
   if (!user) redirect("/login");
   await resetMemberSettings(user.did);
   revalidatePath("/settings");
-  redirect("/settings?reset=1");
+  // A fresh value each time, so the page remounts the form with the defaults.
+  redirect(`/settings?reset=${Date.now()}`);
 }
