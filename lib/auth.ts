@@ -7,6 +7,7 @@ import { randomId, sign, unsign } from "@/lib/crypto";
 import { getDb, withLock } from "@/lib/db";
 import { oauthSession, userSession } from "@/lib/db/schema";
 import { getOAuthClient } from "@/lib/oauth/client";
+import { fetchFromPds } from "@/lib/safe-fetch";
 
 // "__Host-" cookies must be Secure, so dev (plain http) uses a plain name.
 export const SESSION_COOKIE = isProduction ? "__Host-fotolog_session" : "fotolog_session";
@@ -31,7 +32,7 @@ export async function lookupHandle(session: OAuthSession): Promise<string | null
     const { aud } = await session.getTokenInfo(false);
     const url = new URL("/xrpc/com.atproto.repo.describeRepo", aud);
     url.searchParams.set("repo", session.did);
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const res = await fetchFromPds(url);
     if (!res.ok) return null;
     const data = (await res.json()) as { handle?: string; handleIsCorrect?: boolean };
     return data.handleIsCorrect && data.handle ? data.handle : null;
