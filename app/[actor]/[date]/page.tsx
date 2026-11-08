@@ -5,6 +5,8 @@ import { cache } from "react";
 import LocalTime from "@/app/components/LocalTime";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveActor } from "@/lib/identity";
+import { memberPageLook } from "@/lib/member-settings";
+import { getMemberSettings } from "@/lib/member-settings-server";
 import { isValidDateKey, photoRecordKey } from "@/lib/photo-record";
 import { fetchPhoto } from "@/lib/photos/server";
 import { blueskyPostUrl, imageUrl, parseActorParam } from "@/lib/photos/urls";
@@ -59,41 +61,48 @@ export default async function PhotoPage({ params }: Props) {
   const isOwner = user?.did === owner.did;
   const who = owner.handle ? `@${owner.handle}` : owner.did;
   const bskyUrl = blueskyPostUrl(record.post.uri);
+  const look = memberPageLook(await getMemberSettings(owner.did), owner);
 
   return (
-    <main className="photo-page">
-      <header className="photo-meta">
-        <span className="photo-owner">{who}</span>
-        <time dateTime={record.displayDate}>{formatDay(record.displayDate)}</time>
-      </header>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        className="photo"
-        src={imageUrl(owner.did, record.image.ref.toString())}
-        alt={record.alt ?? ""}
-        width={record.aspectRatio?.width}
-        height={record.aspectRatio?.height}
-      />
-      {record.caption && <p className="caption">{record.caption}</p>}
-      <p className="hint">
-        Posted <LocalTime iso={record.createdAt} />
-        {bskyUrl && (
-          <>
-            {" · "}
-            <a href={bskyUrl}>View on Bluesky</a>
-          </>
-        )}
-      </p>
-      {isOwner && (
-        <div className="owner-actions">
-          <DeleteButton rkey={photo.rkey} />
-        </div>
-      )}
-      {!user && (
+    <div className="member-theme" style={{ backgroundColor: look.backgroundColor, color: look.textColor }}>
+      <main className="photo-page">
+        <header className="member-header">
+          <h1>{look.title}</h1>
+          {look.location && <p>{look.location}</p>}
+        </header>
+        <header className="photo-meta">
+          <span className="photo-owner">{who}</span>
+          <time dateTime={record.displayDate}>{formatDay(record.displayDate)}</time>
+        </header>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="photo"
+          src={imageUrl(owner.did, record.image.ref.toString())}
+          alt={record.alt ?? ""}
+          width={record.aspectRatio?.width}
+          height={record.aspectRatio?.height}
+        />
+        {record.caption && <p className="caption">{record.caption}</p>}
         <p className="hint">
-          <Link href="/login">Sign in</Link> to start your own fotolog.
+          Posted <LocalTime iso={record.createdAt} />
+          {bskyUrl && (
+            <>
+              {" · "}
+              <a href={bskyUrl}>View on Bluesky</a>
+            </>
+          )}
         </p>
-      )}
-    </main>
+        {isOwner && (
+          <div className="owner-actions">
+            <DeleteButton rkey={photo.rkey} />
+          </div>
+        )}
+        {!user && (
+          <p className="hint">
+            <Link href="/login">Sign in</Link> to start your own fotolog.
+          </p>
+        )}
+      </main>
+    </div>
   );
 }
