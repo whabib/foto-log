@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { RichText } from "@atproto/api";
 import LocalTime from "@/app/components/LocalTime";
-import type { Guestbook as GuestbookData, GuestbookEntry } from "@/lib/guestbook/entries";
+import { DEFAULT_GUESTBOOK_CAP, type Guestbook as GuestbookData, type GuestbookEntry } from "@/lib/guestbook/entries";
 import { memberPath } from "@/lib/photos/urls";
+import HideButton from "./HideButton";
 import SignForm from "./SignForm";
+import WhoCanSignForm from "./WhoCanSignForm";
 
 /** An entry's text with its links made clickable. Only http(s) links are linked. */
 function EntryText({ entry }: { entry: GuestbookEntry }) {
@@ -31,14 +33,20 @@ export default function Guestbook({
   rkey,
   bskyUrl,
   signedIn,
+  isOwner = false,
+  signBlocked = null,
 }: {
   guestbook: GuestbookData;
   ownerDid: string;
   rkey: string;
   bskyUrl: string | null;
   signedIn: boolean;
+  isOwner?: boolean;
+  /** Why the signed-in viewer can't sign, if they can't. */
+  signBlocked?: string | null;
 }) {
   const { entries, closed, count } = guestbook;
+  const full = count >= DEFAULT_GUESTBOOK_CAP;
   return (
     <section className="guestbook" aria-labelledby="guestbook-heading">
       <h3 id="guestbook-heading" className="rail-heading">
@@ -60,6 +68,12 @@ export default function Guestbook({
                 <span className="said">
                   said on <LocalTime iso={e.createdAt} />
                 </span>
+                {isOwner && e.author.did !== ownerDid && (
+                  <>
+                    {" "}
+                    <HideButton ownerDid={ownerDid} rkey={rkey} entryUri={e.uri} />
+                  </>
+                )}
               </p>
               <EntryText entry={e} />
             </div>
@@ -71,8 +85,21 @@ export default function Guestbook({
           More replies are on <a href={bskyUrl ?? "#"}>Bluesky</a>.
         </p>
       )}
-      {closed ? (
-        <p className="rail-empty">This guestbook is closed.</p>
+      {isOwner && !full && <WhoCanSignForm ownerDid={ownerDid} rkey={rkey} who={guestbook.who} />}
+      {closed && !isOwner ? (
+        <p className="rail-empty">{full ? "This guestbook is full." : "This guestbook is closed."}</p>
+      ) : closed ? (
+        <p className="rail-empty">{full ? "This guestbook is full." : "Nobody else can sign this guestbook."}</p>
+      ) : signBlocked ? (
+        <p className="rail-empty">
+          {signBlocked}
+          {bskyUrl && guestbook.who === "custom" && (
+            <>
+              {" "}
+              <a href={bskyUrl}>Open on Bluesky</a>.
+            </>
+          )}
+        </p>
       ) : signedIn ? (
         <SignForm ownerDid={ownerDid} rkey={rkey} />
       ) : (

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildGuestbook, parseGuestbook, parsePostUri, parseThreadReplies } from "./entries";
+import {
+  allowRules,
+  applyGate,
+  buildGuestbook,
+  parseGuestbook,
+  parsePostUri,
+  parseThreadReplies,
+  whoCanSign,
+} from "./entries";
 
 const reply = (n: number, createdAt: string, extra: Record<string, unknown> = {}) => ({
   $type: "app.bsky.feed.defs#threadViewPost",
@@ -60,6 +68,7 @@ describe("parseGuestbook", () => {
       count: 0,
       closed: false,
       gated: false,
+      who: "everyone",
     });
   });
 
@@ -97,5 +106,47 @@ describe("parsePostUri", () => {
     expect(parsePostUri("at://alice.test/app.bsky.feed.post/3kxyz")).toBeNull();
     expect(parsePostUri("at://did:plc:abc123/app.bsky.feed.post/3kxyz/extra")).toBeNull();
     expect(parsePostUri("https://bsky.app/profile/did:plc:abc123/post/3kxyz")).toBeNull();
+  });
+});
+
+describe("whoCanSign", () => {
+  const following = { $type: "app.bsky.feed.threadgate#followingRule" };
+  it("reads the threadgate's allow list", () => {
+    expect(whoCanSign(undefined)).toBe("everyone");
+    expect(whoCanSign([])).toBe("nobody");
+    expect(whoCanSign([following])).toBe("following");
+    expect(whoCanSign([{ $type: "app.bsky.feed.threadgate#mentionRule" }])).toBe("custom");
+    expect(whoCanSign([following, { $type: "app.bsky.feed.threadgate#mentionRule" }])).toBe("custom");
+    expect(whoCanSign("nonsense")).toBe("custom");
+  });
+
+  it("round-trips each choice through allowRules", () => {
+    for (const who of ["everyone", "following", "nobody"] as const) {
+      expect(whoCanSign(allowRules(who))).toBe(who);
+    }
+  });
+
+  it("comes from the post's threadgate", () => {
+    const g = parseThreadReplies(thread([], { record: { allow: [following] } }));
+    expect(g.who).toBe("following");
+    expect(g.gated).toBe(false);
+  });
+});
+
+describe("applyGate", () => {
+  it("hides entries and applies reply rules we just wrote", () => {
+    const t = parseThreadReplies(thread([reply(1, "2026-01-01T00:00:00Z"), reply(2, "2026-01-02T00:00:00Z")]));
+    const g = applyGate(t, { allow: [], hiddenReplies: ["at://did:plc:u1/app.bsky.feed.post/r1"] });
+    expect(g.entries.map((e) => e.uri)).toEqual(["at://did:plc:u2/app.bsky.feed.post/r2"]);
+    expect(g.gated).toBe(true);
+    expect(g.who).toBe("nobody");
+    expect(buildGuestbook(g).closed).toBe(true);
+  });
+
+  it("reopens a guestbook set back to everyone", () => {
+    const t = parseThreadReplies(thread([reply(1, "2026-01-01T00:00:00Z")], { record: { allow: [] } }));
+    const g = applyGate(t, {});
+    expect(g.gated).toBe(false);
+    expect(buildGuestbook(g).closed).toBe(false);
   });
 });

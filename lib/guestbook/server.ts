@@ -5,14 +5,18 @@ import { agentFor, PhotoError } from "@/lib/photos/server";
 import { graphemeLength } from "@/lib/photos/text";
 import { TtlCache } from "@/lib/ttl-cache";
 import {
+  allowRules,
+  applyGate,
   buildGuestbook,
   DEFAULT_GUESTBOOK_CAP,
+  EMPTY_GUESTBOOK,
   type Guestbook,
   type GuestbookEntry,
   MAX_ENTRY_GRAPHEMES,
   parsePostUri,
   parseThreadReplies,
   type ThreadReplies,
+  type WhoCanSignChoice,
 } from "./entries";
 
 const APPVIEW = "https://public.api.bsky.app";
@@ -23,6 +27,8 @@ const THREADGATE_COLLECTION = "app.bsky.feed.threadgate";
 const threads = new TtlCache<string, ThreadReplies>(30_000, 2000);
 // Entries signed from this site, kept until the AppView has surely indexed them.
 const pending = new TtlCache<string, GuestbookEntry[]>(10 * 60_000, 2000);
+// Threadgates written here, until the AppView has surely indexed them.
+const gates = new TtlCache<string, GateRecord>(2 * 60_000, 2000);
 // Posts we recently tried to close, so reads don't retry on every view.
 const closeAttempts = new TtlCache<string, true>(10 * 60_000, 2000);
 
@@ -58,14 +64,16 @@ export async function getGuestbook(
 ): Promise<Guestbook> {
   const target = parsePostUri(postUri);
   // A photo record could point at anyone's post; only the owner's own count.
-  if (!target || target.did !== ownerDid) return { entries: [], count: 0, closed: false, gated: false };
+  if (!target || target.did !== ownerDid) return EMPTY_GUESTBOOK;
   let thread = opts.fresh ? undefined : threads.get(postUri)?.value;
   if (!thread) {
     const fetched = await fetchThread(postUri);
-    if (!fetched) return { entries: [], count: 0, closed: false, gated: false };
+    if (!fetched) return EMPTY_GUESTBOOK;
     thread = fetched;
     threads.set(postUri, thread);
   }
+  const gate = gates.get(postUri)?.value;
+  if (gate) thread = applyGate(thread, gate);
   const guestbook = buildGuestbook(thread, pending.get(postUri)?.value);
   if (guestbook.count >= DEFAULT_GUESTBOOK_CAP && !guestbook.gated && !closeAttempts.get(postUri)) {
     void tryClose(target);
@@ -75,7 +83,7 @@ export async function getGuestbook(
 
 export class GuestbookError extends Error {
   constructor(
-    readonly code: "invalid" | "closed" | "session_expired",
+    readonly code: "invalid" | "closed" | "not_allowed" | "forbidden" | "session_expired",
     message: string,
   ) {
     super(message);
@@ -107,7 +115,11 @@ export async function signGuestbook(
   if (!target || target.did !== ownerDid) throw new GuestbookError("invalid", "That photo can't be found.");
 
   const before = await getGuestbook(ownerDid, post.uri, { fresh: true });
+  if (before.gated) throw new GuestbookError("closed", "This guestbook is closed.");
   if (before.closed) throw new GuestbookError("closed", "This guestbook is full.");
+  if (!(await mayReply(before, ownerDid, user.did))) {
+    throw new GuestbookError("not_allowed", notAllowedMessage(before));
+  }
 
   let agent;
   try {
@@ -168,27 +180,38 @@ function errorName(err: unknown): string | undefined {
   return typeof e?.error === "string" ? e.error : undefined;
 }
 
+type GateRecord = { allow?: unknown; hiddenReplies?: string[] };
+
 /**
- * Writes a threadgate on the owner's post that allows no more replies,
- * keeping any replies the owner already hid. Uses the owner's stored
- * OAuth session, so it works when someone else signs the last entry.
+ * Rewrites the threadgate on the owner's post with `change`, keeping the
+ * rest of what's there. Uses the owner's stored OAuth session, so a full
+ * guestbook can be closed when someone else signs the last entry.
  */
-async function closeGuestbook(target: { did: string; rkey: string }): Promise<void> {
+async function updateGate(
+  target: { did: string; rkey: string },
+  change: (gate: GateRecord) => GateRecord,
+): Promise<void> {
   const agent = await agentFor(target.did);
-  let hiddenReplies: string[] | undefined;
+  let current: GateRecord = {};
   try {
     const { data } = await agent.com.atproto.repo.getRecord({
       repo: target.did,
       collection: THREADGATE_COLLECTION,
       rkey: target.rkey,
     });
-    const hidden = (data.value as { hiddenReplies?: unknown }).hiddenReplies;
-    if (Array.isArray(hidden)) hiddenReplies = hidden.filter((u): u is string => typeof u === "string");
+    const value = data.value as { allow?: unknown; hiddenReplies?: unknown };
+    current = {
+      allow: value.allow,
+      hiddenReplies: Array.isArray(value.hiddenReplies)
+        ? value.hiddenReplies.filter((u): u is string => typeof u === "string")
+        : undefined,
+    };
   } catch (err) {
     // Only a missing gate is safe to write over; anything else could lose
-    // the owner's hidden replies.
+    // the owner's hidden replies or reply rules.
     if (errorName(err) !== "RecordNotFound") throw err;
   }
+  const next = change(current);
   const postUri = `at://${target.did}/${POST_COLLECTION}/${target.rkey}`;
   await agent.com.atproto.repo.putRecord({
     repo: target.did,
@@ -197,11 +220,110 @@ async function closeGuestbook(target: { did: string; rkey: string }): Promise<vo
     record: {
       $type: THREADGATE_COLLECTION,
       post: postUri,
-      allow: [],
-      ...(hiddenReplies?.length ? { hiddenReplies } : {}),
+      ...(next.allow !== undefined ? { allow: next.allow } : {}),
+      ...(next.hiddenReplies?.length ? { hiddenReplies: next.hiddenReplies } : {}),
       createdAt: new Date().toISOString(),
     },
   });
-  const cached = threads.get(postUri);
-  if (cached) threads.set(postUri, { ...cached.value, gated: true });
+  // Show the change on the next view rather than waiting for the AppView.
+  gates.set(postUri, next);
+}
+
+/** Writes a threadgate on the owner's post that allows no more replies. */
+async function closeGuestbook(target: { did: string; rkey: string }): Promise<void> {
+  await updateGate(target, (gate) => ({ ...gate, allow: [] }));
+}
+
+/** Bluesky's limit on a threadgate's hidden replies. */
+const MAX_HIDDEN_REPLIES = 300;
+
+function ownersPost(user: CurrentUser, ownerDid: string, postUri: string) {
+  const target = parsePostUri(postUri);
+  if (!target || target.did !== ownerDid || user.did !== ownerDid) {
+    throw new GuestbookError("forbidden", "Only the owner of this photo can do that.");
+  }
+  return target;
+}
+
+async function asOwner(run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (err) {
+    if (err instanceof PhotoError) throw new GuestbookError("session_expired", err.message);
+    throw err;
+  }
+}
+
+/**
+ * Hides an entry from the owner's guestbook by adding it to the photo
+ * post's threadgate, which Bluesky apps honor too. Only the owner can.
+ */
+export async function hideEntry(user: CurrentUser, ownerDid: string, postUri: string, entryUri: string) {
+  const target = ownersPost(user, ownerDid, postUri);
+  if (!/^at:\/\/did:[^/]+\/app\.bsky\.feed\.post\/[^/]+$/.test(entryUri)) {
+    throw new GuestbookError("invalid", "That entry can't be found.");
+  }
+  await asOwner(() =>
+    updateGate(target, (gate) => {
+      const hidden = gate.hiddenReplies ?? [];
+      if (hidden.includes(entryUri)) return gate;
+      if (hidden.length >= MAX_HIDDEN_REPLIES) {
+        throw new GuestbookError("invalid", `You can hide up to ${MAX_HIDDEN_REPLIES} entries on a photo.`);
+      }
+      return { ...gate, hiddenReplies: [...hidden, entryUri] };
+    }),
+  );
+  const left = pending.get(postUri)?.value.filter((e) => e.uri !== entryUri);
+  if (left) pending.set(postUri, left);
+}
+
+/** Sets who can sign the guestbook of the owner's photo post. Only the owner can. */
+export async function setWhoCanSign(user: CurrentUser, ownerDid: string, postUri: string, who: WhoCanSignChoice) {
+  const target = ownersPost(user, ownerDid, postUri);
+  await asOwner(() => updateGate(target, (gate) => ({ ...gate, allow: allowRules(who) })));
+}
+
+const followCache = new TtlCache<string, boolean>(60_000, 5000);
+
+/** Whether `ownerDid` follows `did`, from Bluesky's public AppView. False if unknown. */
+async function follows(ownerDid: string, did: string): Promise<boolean> {
+  const key = `${ownerDid} ${did}`;
+  const cached = followCache.get(key);
+  if (cached) return cached.value;
+  const url = new URL("/xrpc/app.bsky.graph.getRelationships", APPVIEW);
+  url.searchParams.set("actor", ownerDid);
+  url.searchParams.append("others", did);
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000), cache: "no-store" });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { relationships?: { did?: string; following?: unknown }[] };
+    const rel = body.relationships?.find((r) => r.did === did);
+    const result = typeof rel?.following === "string";
+    followCache.set(key, result);
+    return result;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether `did` may sign this guestbook under its reply rules. The owner
+ * always may. Rules set elsewhere ("custom") are left to Bluesky apps.
+ */
+export async function mayReply(guestbook: Guestbook, ownerDid: string, did: string): Promise<boolean> {
+  if (did === ownerDid) return true;
+  switch (guestbook.who) {
+    case "everyone":
+      return true;
+    case "following":
+      return follows(ownerDid, did);
+    default:
+      return false;
+  }
+}
+
+export function notAllowedMessage(guestbook: Guestbook): string {
+  return guestbook.who === "following"
+    ? "Only people this member follows can sign this guestbook."
+    : "This guestbook only takes entries from some people. You can try replying on Bluesky.";
 }

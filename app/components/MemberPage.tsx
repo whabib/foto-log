@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import LocalTime from "@/app/components/LocalTime";
 import ShareButton from "@/app/components/ShareButton";
 import Guestbook from "@/app/components/guestbook/Guestbook";
-import type { Guestbook as GuestbookData } from "@/lib/guestbook/entries";
+import { EMPTY_GUESTBOOK, type Guestbook as GuestbookData } from "@/lib/guestbook/entries";
 import DeleteButton from "@/app/[actor]/[date]/DeleteButton";
 import { baseUrl } from "@/lib/config";
 import type { Actor } from "@/lib/identity";
@@ -50,6 +50,7 @@ export type MemberPageProps = {
   newer: StoredPhoto | null;
   guestbook: GuestbookData | null;
   isOwner: boolean;
+  signBlocked?: string | null;
   signedIn: boolean;
 };
 
@@ -142,6 +143,7 @@ function CenterPhoto({
   isOwner,
   guestbook,
   signedIn,
+  signBlocked,
 }: MemberPageProps & { photo: StoredPhoto }) {
   const { record } = photo;
   const bskyUrl = blueskyPostUrl(record.post.uri);
@@ -208,11 +210,13 @@ function CenterPhoto({
       )}
 
       <Guestbook
-        guestbook={guestbook ?? { entries: [], count: 0, closed: false, gated: false }}
+        guestbook={guestbook ?? EMPTY_GUESTBOOK}
         ownerDid={owner.did}
         rkey={photo.rkey}
         bskyUrl={bskyUrl}
         signedIn={signedIn}
+        isOwner={isOwner}
+        signBlocked={signBlocked ?? null}
       />
     </>
   );

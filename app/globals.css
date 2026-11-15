@@ -839,3 +839,36 @@ body:has(.member-theme) .account-menu li button:hover {
     display: none;
   }
 }
+
+.entry-hide {
+  font-size: 0.75rem;
+  margin-left: 4px;
+}
+
+.who-can-sign {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 0.875rem;
+}
+
+.who-can-sign select,
+.who-can-sign button {
+  font: inherit;
+  padding: 2px 6px;
+}
+
+.who-can-sign .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.member-theme .who-can-sign button {
+  border: 1px solid var(--m-link);
+  border-radius: 4px;
+  background: var(--m-link);
+  color: var(--m-bg);
+  cursor: pointer;
+}
