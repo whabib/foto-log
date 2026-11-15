@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
+import AccountMenu from "@/app/components/AccountMenu";
+import { memberPath } from "@/lib/photos/urls";
 
 export default async function Header() {
   const user = await getCurrentUser();
@@ -11,17 +13,13 @@ export default async function Header() {
         <span className="brand-logo" aria-hidden="true" />
       </Link>
       {user ? (
-        <form action={signOut} className="account">
-          <Link href="/post">Post a photo</Link>
-          <Link href="/settings">Settings</Link>
-          <span className="signed-in">
-            <span className="signed-in-label">Signed in as </span>
-            <strong>{user.handle ? `@${user.handle}` : user.did}</strong>
-          </span>
-          <button type="submit" className="link-button">
-            Sign out
-          </button>
-        </form>
+        <div className="account">
+          <AccountMenu
+            label={user.handle ? `@${user.handle}` : user.did}
+            myPage={memberPath({ did: user.did, handle: user.handle ?? null })}
+            signOut={signOut}
+          />
+        </div>
       ) : (
         <Link href="/login" className="account">
           Sign in
