@@ -1,10 +1,21 @@
 "use client";
 
 import { startTransition, useActionState, useState } from "react";
-import { formatLocation, isRegionCode, regionLabel, regionOptions } from "@/lib/geo";
+import {
+  formatLocation,
+  isRegionCode,
+  regionLabel,
+  regionOptions,
+} from "@/lib/geo";
 import { contrastRatio, isHexColor, MIN_CONTRAST } from "@/lib/member-settings";
 import { resetSettings, type SaveState, saveSettings } from "./actions";
-import MemberImageField from "./MemberImageField";
+import { useRouter } from "next/navigation";
+import MemberImageField, {
+  type ImageError,
+  NO_CHANGE,
+  type PendingImage,
+  saveImageChange,
+} from "./MemberImageField";
 import WallpaperField from "./WallpaperField";
 
 type Values = {
@@ -23,7 +34,11 @@ type Props = {
   countries: { code: string; name: string }[];
   hasSaved: boolean;
   /** Saved page images; undefined if they couldn't be loaded. */
-  images?: { titleImage: string | null; wallpaper: string | null; wallpaperMode: "tile" | "fill" };
+  images?: {
+    titleImage: string | null;
+    wallpaper: string | null;
+    wallpaperMode: "tile" | "fill";
+  };
 };
 
 function ColorField({
@@ -67,17 +82,67 @@ function ColorField({
         />
       </div>
       {(error || (value !== "" && !isHexColor(value))) && (
-        <p className="field-error">{error ?? "Use a hex color like #1a1a1a."}</p>
+        <p className="field-error">
+          {error ?? "Use a hex color like #1a1a1a."}
+        </p>
       )}
     </div>
   );
 }
 
-export default function SettingsForm({ initial, defaults, countries, hasSaved, images }: Props) {
+export default function SettingsForm({
+  initial,
+  defaults,
+  countries,
+  hasSaved,
+  images,
+}: Props) {
+  const router = useRouter();
   const [values, setValues] = useState<Values>(initial);
-  const [state, formAction, pending] = useActionState<SaveState, FormData>(saveSettings, {
-    status: "idle",
-  });
+  // Image changes wait here until Save, like the rest of the form.
+  const [titleImage, setTitleImage] = useState<PendingImage>(NO_CHANGE);
+  const [wallpaper, setWallpaper] = useState<PendingImage>(NO_CHANGE);
+  const [wallpaperMode, setWallpaperMode] = useState(
+    images?.wallpaperMode ?? "tile",
+  );
+  const [imageErrors, setImageErrors] = useState<{
+    titleImage?: ImageError;
+    wallpaper?: ImageError;
+  }>({});
+  const [state, formAction, pending] = useActionState<SaveState, FormData>(
+    async (prev, data) => {
+      const result = await saveSettings(prev, data);
+      if (result.status !== "saved" || !images) return result;
+      // Then the images, each separately, so one failing doesn't undo the others.
+      const errors: typeof imageErrors = {};
+      if (titleImage.kind !== "none") {
+        const err = await saveImageChange("titleImage", titleImage);
+        if (err) errors.titleImage = err;
+        else setTitleImage(NO_CHANGE);
+      }
+      const modeChanged = wallpaperMode !== images.wallpaperMode;
+      if (wallpaper.kind !== "none" || modeChanged) {
+        const err = await saveImageChange(
+          "wallpaper",
+          wallpaper,
+          modeChanged || wallpaper.kind === "set" ? wallpaperMode : undefined,
+        );
+        if (err) errors.wallpaper = err;
+        else setWallpaper(NO_CHANGE);
+      }
+      setImageErrors(errors);
+      router.refresh();
+      return Object.keys(errors).length
+        ? {
+            status: "error",
+            errors: {},
+            message:
+              "Your settings were saved, but an image wasn't. See below.",
+          }
+        : result;
+    },
+    { status: "idle" },
+  );
   const set = (field: keyof Values) => (v: string) =>
     setValues((prev) => ({
       ...prev,
@@ -88,14 +153,19 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
   const errors = state.status === "error" ? state.errors : {};
 
   const regions = regionOptions(values.country);
-  const bg = isHexColor(values.backgroundColor) ? values.backgroundColor : defaults.backgroundColor;
-  const fg = isHexColor(values.textColor) ? values.textColor : defaults.textColor;
+  const bg = isHexColor(values.backgroundColor)
+    ? values.backgroundColor
+    : defaults.backgroundColor;
+  const fg = isHexColor(values.textColor)
+    ? values.textColor
+    : defaults.textColor;
   // Blank link color means "same as the text".
   const link = isHexColor(values.linkColor) ? values.linkColor : fg;
   const ratio = contrastRatio(bg, fg);
   const linkRatio = contrastRatio(bg, link);
   const previewLocation =
-    values.country && (!regions || !values.region || isRegionCode(values.country, values.region))
+    values.country &&
+    (!regions || !values.region || isRegionCode(values.country, values.region))
       ? formatLocation({
           country: values.country,
           region: values.region || null,
@@ -125,7 +195,9 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
             placeholder={defaults.title}
             onChange={(e) => set("title")(e.target.value)}
           />
-          <p className="hint">Leave blank to use &ldquo;{defaults.title}&rdquo;.</p>
+          <p className="hint">
+            Leave blank to use &ldquo;{defaults.title}&rdquo;.
+          </p>
           {errors.title && <p className="field-error">{errors.title}</p>}
         </div>
 
@@ -134,6 +206,10 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
             field="titleImage"
             label="Title Image"
             current={images.titleImage}
+            pending={titleImage}
+            onChange={setTitleImage}
+            disabled={pending}
+            error={imageErrors.titleImage}
             alt={values.title.trim() || defaults.title}
             background={bg}
             previewClassName="title-image-preview"
@@ -144,7 +220,12 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
         <fieldset className="field">
           <legend>Location</legend>
           <label htmlFor="country">Country</label>
-          <select id="country" name="country" value={values.country} onChange={(e) => set("country")(e.target.value)}>
+          <select
+            id="country"
+            name="country"
+            value={values.country}
+            onChange={(e) => set("country")(e.target.value)}
+          >
             <option value="">Not shown</option>
             {countries.map((c) => (
               <option key={c.code} value={c.code}>
@@ -161,7 +242,12 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
                 {!regions && <span className="optional"> (optional)</span>}
               </label>
               {regions ? (
-                <select id="region" name="region" value={values.region} onChange={(e) => set("region")(e.target.value)}>
+                <select
+                  id="region"
+                  name="region"
+                  value={values.region}
+                  onChange={(e) => set("region")(e.target.value)}
+                >
                   <option value="">Not shown</option>
                   {regions.map((r) => (
                     <option key={r.code} value={r.code}>
@@ -190,7 +276,9 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
                 value={values.locality}
                 onChange={(e) => set("locality")(e.target.value)}
               />
-              {errors.locality && <p className="field-error">{errors.locality}</p>}
+              {errors.locality && (
+                <p className="field-error">{errors.locality}</p>
+              )}
             </>
           )}
         </fieldset>
@@ -219,24 +307,44 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
           error={errors.linkColor}
           onChange={set("linkColor")}
         />
-        <p className="hint">Leave the link color blank to match the text. Links show in the text color when hovered.</p>
+        <p className="hint">
+          Leave the link color blank to match the text. Links show in the text
+          color when hovered.
+        </p>
 
         <div className="field">
           <span className="label">Preview</span>
-          <div className="member-preview" style={{ backgroundColor: bg, color: fg }}>
+          <div
+            className="member-preview"
+            style={{ backgroundColor: bg, color: fg }}
+          >
             <strong>{values.title.trim() || defaults.title}</strong>
             {previewLocation && <span>{previewLocation}</span>}
-            <span style={{ color: link, textDecoration: "underline" }}>A link</span>
+            <span style={{ color: link, textDecoration: "underline" }}>
+              A link
+            </span>
           </div>
           {Math.min(ratio, linkRatio) < MIN_CONTRAST && (
             <p className="warning" role="status">
-              These colors may be hard to read (contrast {Math.min(ratio, linkRatio).toFixed(1)}:1; at least {MIN_CONTRAST}:1 is
-              recommended). You can still save them.
+              These colors may be hard to read (contrast{" "}
+              {Math.min(ratio, linkRatio).toFixed(1)}:1; at least {MIN_CONTRAST}
+              :1 is recommended). You can still save them.
             </p>
           )}
         </div>
 
-        {images && <WallpaperField current={images.wallpaper} mode={images.wallpaperMode} background={bg} />}
+        {images && (
+          <WallpaperField
+            current={images.wallpaper}
+            pending={wallpaper}
+            onChange={setWallpaper}
+            mode={wallpaperMode}
+            onModeChange={setWallpaperMode}
+            disabled={pending}
+            error={imageErrors.wallpaper}
+            background={bg}
+          />
+        )}
 
         {state.status === "error" && state.message && (
           <p className="error" role="alert">
@@ -258,7 +366,11 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
           action={resetSettings}
           className="reset-form"
           onSubmit={(e) => {
-            if (!confirm("Reset your member page to the default title, no location, and the default colors?")) {
+            if (
+              !confirm(
+                "Reset your member page to the default title, no location, and the default colors?",
+              )
+            ) {
               e.preventDefault();
             }
           }}

@@ -1,110 +1,122 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { type ReactNode, startTransition, useEffect, useState } from "react";
 import { reauthorize } from "@/app/login/actions";
 import { type PreparedImage, prepareImage } from "@/lib/client/prepare-image";
 import type { ProfileImageField } from "@/lib/member-profile";
 
-type Status = { kind: "idle" } | { kind: "busy" } | { kind: "error"; message: string; signIn?: boolean };
+/** A change to one image, waiting for the settings form's Save. */
+export type PendingImage = { kind: "none" } | { kind: "set"; image: PreparedImage } | { kind: "remove" };
+export const NO_CHANGE: PendingImage = { kind: "none" };
 
-export type ImageRequest = { image?: PreparedImage; remove?: boolean; wallpaperMode?: "tile" | "fill" };
+export type ImageError = { message: string; signIn?: boolean };
 
 /**
- * Sends a change to the member's page images. Returns an error message, or
- * null when it worked.
+ * Saves changes to the member's page images. Resolves to an error, or null
+ * when it worked.
  */
-export function useImageSender(field: ProfileImageField) {
-  const router = useRouter();
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
-  async function send(req: ImageRequest): Promise<boolean> {
-    setStatus({ kind: "busy" });
-    const form = new FormData();
-    if (req.image || req.remove) form.set("field", field);
-    if (req.image) {
-      form.set("image", req.image.blob, `${field}.jpg`);
-      form.set("width", String(req.image.width));
-      form.set("height", String(req.image.height));
-    }
-    if (req.remove) form.set("remove", "1");
-    if (req.wallpaperMode) form.set("wallpaperMode", req.wallpaperMode);
-    try {
-      const res = await fetch("/api/member-images", { method: "POST", body: form });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-      if (!res.ok) {
-        setStatus({
-          kind: "error",
-          message: data.error ?? "Something went wrong. Please try again.",
-          signIn: data.code === "session_expired",
-        });
-        return false;
-      }
-      setStatus({ kind: "idle" });
-      router.refresh();
-      return true;
-    } catch {
-      setStatus({ kind: "error", message: "Couldn't reach foto-log. Check your connection and try again." });
-      return false;
-    }
+export async function saveImageChange(
+  field: ProfileImageField,
+  change: PendingImage,
+  wallpaperMode?: "tile" | "fill",
+): Promise<ImageError | null> {
+  const form = new FormData();
+  if (change.kind !== "none") form.set("field", field);
+  if (change.kind === "set") {
+    form.set("image", change.image.blob, `${field}.jpg`);
+    form.set("width", String(change.image.width));
+    form.set("height", String(change.image.height));
   }
-  return { status, setStatus, send };
+  if (change.kind === "remove") form.set("remove", "1");
+  if (wallpaperMode) form.set("wallpaperMode", wallpaperMode);
+  try {
+    const res = await fetch("/api/member-images", { method: "POST", body: form });
+    if (res.ok) return null;
+    const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    return {
+      message: data.error ?? "Something went wrong saving that image. Please try again.",
+      signIn: data.code === "session_expired",
+    };
+  } catch {
+    return { message: "Couldn't reach foto-log. Check your connection and try again." };
+  }
+}
+
+/** The "Sign in again" control for permission errors. A button, since it sits inside the settings form. */
+export function ImageErrorMessage({ error }: { error: ImageError }) {
+  return (
+    <div className="field-error" role="alert">
+      {error.message}{" "}
+      {error.signIn && (
+        <button type="button" className="link-button" onClick={() => startTransition(() => reauthorize())}>
+          Sign in again
+        </button>
+      )}
+    </div>
+  );
 }
 
 /**
- * Upload, preview and remove one member page image. Changes save right
- * away, separately from the rest of the settings form it sits in.
+ * Choose, preview and remove one member page image. The change waits in
+ * `pending` until the settings form is saved.
  */
 export default function MemberImageField({
   field,
   label,
   current,
+  pending,
+  onChange,
+  disabled,
+  error,
   alt,
   background,
   hint,
   previewClassName,
-  extra,
+  controls,
   renderPreview,
-  sender: shared,
 }: {
   field: ProfileImageField;
   label: string;
   /** URL of the saved image, if any. */
   current: string | null;
+  pending: PendingImage;
+  onChange: (change: PendingImage) => void;
+  disabled?: boolean;
+  error?: ImageError | null;
   alt: string;
-  /** Fills any transparency in the uploaded image, and the preview. */
+  /** Fills any transparency in the chosen image, and the preview. */
   background: string;
   hint: ReactNode;
   previewClassName: string;
-  /** More options, given the extra fields to send with an upload. */
-  extra?: { request: Omit<ImageRequest, "image" | "remove">; controls: ReactNode };
+  /** More options under the buttons. */
+  controls?: ReactNode;
   /** Draws the preview from the image URL; an <img> by default. */
   renderPreview?: (url: string) => ReactNode;
-  /** A sender shared with the extra controls, so they show one busy state and one error. */
-  sender?: ReturnType<typeof useImageSender>;
 }) {
-  const [picked, setPicked] = useState<PreparedImage | null>(null);
-  const own = useImageSender(field);
-  const { status, setStatus, send } = shared ?? own;
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
   const id = `${field}-label`;
+  const picked = pending.kind === "set" ? pending.image : null;
 
   useEffect(() => () => {
     if (picked) URL.revokeObjectURL(picked.url);
   }, [picked]);
 
   async function onFile(file: File | undefined) {
-    setPicked(null);
     if (!file) return;
-    setStatus({ kind: "busy" });
+    setReading(true);
+    setReadError(null);
     try {
-      setPicked(await prepareImage(file, { background }));
-      setStatus({ kind: "idle" });
+      onChange({ kind: "set", image: await prepareImage(file, { background }) });
     } catch {
-      setStatus({ kind: "error", message: "That image couldn't be read. Try a JPEG or PNG." });
+      setReadError("That image couldn't be read. Try a JPEG or PNG.");
+    } finally {
+      setReading(false);
     }
   }
 
-  const shown = picked?.url ?? current;
-  const busy = status.kind === "busy";
+  const shown = picked ? picked.url : pending.kind === "remove" ? null : current;
+  const busy = disabled || reading;
   return (
     <div className="field image-setting">
       <span className="label" id={id}>
@@ -117,12 +129,12 @@ export default function MemberImageField({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={shown} alt={alt} />
         ) : (
-          <span className="muted">None</span>
+          <span className="muted">{pending.kind === "remove" ? "Removed when you save" : "None"}</span>
         )}
       </div>
       <div className="image-setting-row">
         <label className="file-button">
-          {current || picked ? "Choose another image" : "Choose an image"}
+          {reading ? "Reading…" : shown ? "Choose another image" : "Choose an image"}
           <input
             type="file"
             accept="image/*"
@@ -136,42 +148,22 @@ export default function MemberImageField({
             }}
           />
         </label>
-        {picked && (
-          <button
-            type="button"
-            className="primary"
-            disabled={busy}
-            onClick={async () => {
-              if (await send({ image: picked, ...extra?.request })) setPicked(null);
-            }}
-          >
-            {busy ? "Saving…" : `Save ${label.toLowerCase()}`}
+        {pending.kind !== "none" ? (
+          <button type="button" disabled={busy} onClick={() => onChange(NO_CHANGE)}>
+            Undo
           </button>
-        )}
-        {picked && (
-          <button type="button" disabled={busy} onClick={() => setPicked(null)}>
-            Cancel
-          </button>
-        )}
-        {!picked && current && (
-          <button type="button" disabled={busy} onClick={() => send({ remove: true })}>
-            {busy ? "Removing…" : "Remove"}
-          </button>
+        ) : (
+          current && (
+            <button type="button" disabled={busy} onClick={() => onChange({ kind: "remove" })}>
+              Remove
+            </button>
+          )
         )}
       </div>
-      {extra?.controls}
+      {controls}
       <p className="hint">{hint}</p>
-      {status.kind === "error" && (
-        <div className="field-error" role="alert">
-          {status.message}{" "}
-          {status.signIn && (
-            // A button, not a form: this sits inside the settings form.
-            <button type="button" className="link-button" onClick={() => startTransition(() => reauthorize())}>
-              Sign in again
-            </button>
-          )}
-        </div>
-      )}
+      {readError && <p className="field-error">{readError}</p>}
+      {error && <ImageErrorMessage error={error} />}
     </div>
   );
 }
