@@ -2,7 +2,7 @@
 
 import { reauthorize } from "@/app/login/actions";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import { type PreparedImage, prepareImage } from "@/lib/client/prepare-image";
 
 type Status = { kind: "idle" } | { kind: "busy" } | { kind: "error"; message: string; signIn?: boolean };
@@ -71,7 +71,10 @@ export default function TitleImageForm({
   const shown = picked?.url ?? current;
   const busy = status.kind === "busy";
   return (
-    <div className="image-setting">
+    <div className="field image-setting">
+      <span className="label" id="title-image-label">
+        Title Image <span className="optional">(optional)</span>
+      </span>
       <div className="title-image-preview" style={{ backgroundColor: background }}>
         {shown ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -85,6 +88,7 @@ export default function TitleImageForm({
           {current || picked ? "Choose another image" : "Choose an image"}
           <input
             type="file"
+            aria-labelledby="title-image-label"
             accept="image/*"
             disabled={busy}
             onChange={(e) => {
@@ -112,18 +116,17 @@ export default function TitleImageForm({
         )}
       </div>
       <p className="hint">
-        Replaces the text title across the top of your page. Wide images work best, like 738×60. It&apos;s shown up
-        to 150px tall and saved in your own Bluesky account.
+        Your title will be used as the alt text for the image. It replaces the text title across the top of your
+        page. Wide images work best, like 738×60, shown up to 150px tall.
       </p>
       {status.kind === "error" && (
         <div className="field-error" role="alert">
           {status.message}{" "}
           {status.signIn && (
-            <form action={reauthorize} className="inline-form">
-              <button type="submit" className="link-button">
-                Sign in again
-              </button>
-            </form>
+            // A button, not a form: this sits inside the settings form.
+            <button type="button" className="link-button" onClick={() => startTransition(() => reauthorize())}>
+              Sign in again
+            </button>
           )}
         </div>
       )}

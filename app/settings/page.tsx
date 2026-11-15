@@ -14,7 +14,6 @@ import { resolveActor } from "@/lib/identity";
 import { memberImageUrl } from "@/lib/photos/urls";
 import { currentIdentity } from "@/lib/photos/server";
 import SettingsForm from "./SettingsForm";
-import TitleImageForm from "./TitleImageForm";
 
 export const metadata: Metadata = { title: "Settings · foto-log" };
 
@@ -56,19 +55,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           }}
           countries={countryOptions()}
           hasSaved={saved !== null}
+          titleImage={images ? (images.titleImage ? memberImageUrl(user.did, images.titleImage.cid) : null) : undefined}
         />
-      </section>
-      <section>
-        <h2>Title image</h2>
-        {images ? (
-          <TitleImageForm
-            current={images.titleImage ? memberImageUrl(user.did, images.titleImage.cid) : null}
-            title={s.title ?? defaultTitle(identity)}
-            background={s.backgroundColor ?? DEFAULT_BACKGROUND_COLOR}
-          />
-        ) : (
-          <p className="field-error">Your page images couldn&apos;t be loaded. Please try again later.</p>
-        )}
       </section>
     </main>
   );
