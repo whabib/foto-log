@@ -94,10 +94,82 @@ a {
   min-width: 0;
 }
 
-.site-header .account span {
+.account-menu {
+  position: relative;
+  min-width: 0;
+}
+
+.account-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.account-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-menu summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-menu .caret {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+}
+
+.account-menu[open] .caret {
+  transform: rotate(180deg);
+}
+
+.account-menu ul {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 10;
+  min-width: 180px;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+}
+
+.account-menu form {
+  margin: 0;
+}
+
+.account-menu li a,
+.account-menu li button {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  color: var(--fg);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.account-menu li a:hover,
+.account-menu li button:hover,
+.account-menu li a:focus-visible,
+.account-menu li button:focus-visible {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
 }
 
 .link-button {
@@ -316,6 +388,22 @@ body:has(.member-theme) .site-header .link-button {
 body:has(.member-theme) .site-header a:hover,
 body:has(.member-theme) .site-header .link-button:hover {
   color: var(--m-fg);
+}
+
+body:has(.member-theme) .account-menu ul {
+  background: var(--m-bg);
+  border-color: color-mix(in srgb, var(--m-fg) 30%, var(--m-bg));
+}
+
+body:has(.member-theme) .account-menu li a,
+body:has(.member-theme) .account-menu li button {
+  color: var(--m-link);
+}
+
+body:has(.member-theme) .account-menu li a:hover,
+body:has(.member-theme) .account-menu li button:hover {
+  color: var(--m-fg);
+  background: color-mix(in srgb, var(--m-fg) 12%, transparent);
 }
 
 .member-cols {
@@ -747,19 +835,7 @@ body:has(.member-theme) .site-header .link-button:hover {
 }
 
 @media (max-width: 560px) {
-  .site-header .account {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 4px 12px;
-  }
-
   .signed-in-label {
     display: none;
-  }
-
-  .site-header .account .signed-in {
-    flex-basis: 100%;
-    text-align: right;
-    order: -1;
   }
 }
