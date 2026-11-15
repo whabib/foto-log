@@ -65,6 +65,6 @@ Images a member uploads to customize their fotolog page live in a `com.foto-log.
 - `lib/member-profile.ts`: `memberImagesFromRecord()` turns a record into the images to show, treating anything invalid as unset.
 - `lib/member-profile-server.ts`:
   - `getMemberImages()` reads the record from the member's PDS, cached for a minute.
-  - `setMemberImage()` uploads a blob and sets one field, or clears it. It keeps the other fields and uses `swapRecord` so concurrent changes don't overwrite each other.
+  - `setMemberImage()` uploads a blob and sets one field, or clears it, and/or sets `wallpaperMode`. It keeps the other fields and uses `swapRecord` so concurrent changes don't overwrite each other.
 - Images are served from the Bluesky CDN, like photos (`memberImageUrl`).
 - Writing the record needs the `repo:com.foto-log.profile` OAuth scope. Members who signed in before it was added are asked to sign in again.

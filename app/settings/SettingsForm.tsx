@@ -4,7 +4,9 @@ import { startTransition, useActionState, useState } from "react";
 import { formatLocation, isRegionCode, regionLabel, regionOptions } from "@/lib/geo";
 import { contrastRatio, isHexColor, MIN_CONTRAST } from "@/lib/member-settings";
 import { resetSettings, type SaveState, saveSettings } from "./actions";
-import TitleImageForm from "./TitleImageForm";
+import { useRouter } from "next/navigation";
+import MemberImageField, { type ImageError, NO_CHANGE, type PendingImage, saveImageChange } from "./MemberImageField";
+import WallpaperField from "./WallpaperField";
 
 type Values = {
   title: string;
@@ -21,8 +23,8 @@ type Props = {
   defaults: { title: string; backgroundColor: string; textColor: string };
   countries: { code: string; name: string }[];
   hasSaved: boolean;
-  /** The saved title image's URL, if any; undefined if images couldn't be loaded. */
-  titleImage?: string | null;
+  /** Saved page images; undefined if they couldn't be loaded. */
+  images?: { titleImage: string | null; wallpaper: string | null; wallpaperMode: "tile" | "fill" };
 };
 
 function ColorField({
@@ -72,11 +74,40 @@ function ColorField({
   );
 }
 
-export default function SettingsForm({ initial, defaults, countries, hasSaved, titleImage }: Props) {
+export default function SettingsForm({ initial, defaults, countries, hasSaved, images }: Props) {
+  const router = useRouter();
   const [values, setValues] = useState<Values>(initial);
-  const [state, formAction, pending] = useActionState<SaveState, FormData>(saveSettings, {
-    status: "idle",
-  });
+  // Image changes wait here until Save, like the rest of the form.
+  const [titleImage, setTitleImage] = useState<PendingImage>(NO_CHANGE);
+  const [wallpaper, setWallpaper] = useState<PendingImage>(NO_CHANGE);
+  const [wallpaperMode, setWallpaperMode] = useState(images?.wallpaperMode ?? "tile");
+  const [imageErrors, setImageErrors] = useState<{ titleImage?: ImageError; wallpaper?: ImageError }>({});
+  const [state, formAction, pending] = useActionState<SaveState, FormData>(
+    async (prev, data) => {
+      const result = await saveSettings(prev, data);
+      if (result.status !== "saved" || !images) return result;
+      // Then the images, each separately, so one failing doesn't undo the others.
+      const errors: typeof imageErrors = {};
+      if (titleImage.kind !== "none") {
+        const err = await saveImageChange("titleImage", titleImage);
+        if (err) errors.titleImage = err;
+        else setTitleImage(NO_CHANGE);
+      }
+      const modeChanged = wallpaperMode !== images.wallpaperMode;
+      if (wallpaper.kind !== "none" || modeChanged) {
+        const mode = modeChanged || wallpaper.kind === "set" ? wallpaperMode : undefined;
+        const err = await saveImageChange("wallpaper", wallpaper, mode);
+        if (err) errors.wallpaper = err;
+        else setWallpaper(NO_CHANGE);
+      }
+      setImageErrors(errors);
+      router.refresh();
+      return Object.keys(errors).length
+        ? { status: "error", errors: {}, message: "Your settings were saved, but an image wasn't. See above." }
+        : result;
+    },
+    { status: "idle" },
+  );
   const set = (field: keyof Values) => (v: string) =>
     setValues((prev) => ({
       ...prev,
@@ -128,11 +159,19 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, t
           {errors.title && <p className="field-error">{errors.title}</p>}
         </div>
 
-        {titleImage !== undefined && (
-          <TitleImageForm
-            current={titleImage}
-            title={values.title.trim() || defaults.title}
-            background={isHexColor(values.backgroundColor) ? values.backgroundColor : defaults.backgroundColor}
+        {images && (
+          <MemberImageField
+            field="titleImage"
+            label="Title Image"
+            current={images.titleImage}
+            pending={titleImage}
+            onChange={setTitleImage}
+            disabled={pending}
+            error={imageErrors.titleImage}
+            alt={values.title.trim() || defaults.title}
+            background={bg}
+            previewClassName="title-image-preview"
+            hint="Your title will be used as the alt text for the image. It replaces the text title across the top of your page. Wide images work best, like 738×60, shown up to 150px tall."
           />
         )}
 
@@ -230,6 +269,19 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, t
             </p>
           )}
         </div>
+
+        {images && (
+          <WallpaperField
+            current={images.wallpaper}
+            pending={wallpaper}
+            onChange={setWallpaper}
+            mode={wallpaperMode}
+            onModeChange={setWallpaperMode}
+            disabled={pending}
+            error={imageErrors.wallpaper}
+            background={bg}
+          />
+        )}
 
         {state.status === "error" && state.message && (
           <p className="error" role="alert">

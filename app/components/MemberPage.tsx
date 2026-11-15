@@ -60,12 +60,18 @@ export type MemberPageProps = {
 export default function MemberPage(props: MemberPageProps) {
   const { owner, look, avatar, photo, recent, older, newer, isOwner, signedIn, images } = props;
   const titleImage = images?.titleImage ?? null;
+  const wallpaper = images?.wallpaper ?? null;
   const who = owner.handle ?? owner.did;
   const theme = {
     "--m-bg": look.backgroundColor,
     "--m-fg": look.textColor,
     "--m-link": look.linkColor,
+    ...(wallpaper && {
+      // The URL is built from a DID and a CID, neither of which can contain quotes.
+      backgroundImage: `url("${memberImageUrl(owner.did, wallpaper.cid)}")`,
+    }),
   } as CSSProperties;
+  const wallpaperClass = wallpaper ? (images?.wallpaperMode === "fill" ? " wallpaper-fill" : " wallpaper-tile") : "";
   // The site header sits outside this component, so give it the member's
   // colors through page-level variables. Only plain hex colors get here.
   const colors = [look.backgroundColor, look.textColor, look.linkColor];
@@ -74,7 +80,7 @@ export default function MemberPage(props: MemberPageProps) {
     : "";
 
   return (
-    <div className="member-theme" style={theme}>
+    <div className={`member-theme${wallpaperClass}`} style={theme}>
       {headerStyle && <style>{headerStyle}</style>}
       <div className="member-box">
         <header className={titleImage ? "member-title has-image" : "member-title"}>
