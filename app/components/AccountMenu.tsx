@@ -52,7 +52,12 @@ export default function AccountMenu({
         <strong>{label}</strong>
         <span className="caret" aria-hidden="true" />
       </summary>
-      <ul>
+      {/* Close after picking a link, even one to the page you're already on. */}
+      <ul
+        onClick={(e) => {
+          if ((e.target as Element).closest("a") && ref.current) ref.current.open = false;
+        }}
+      >
         <li>
           <Link href={myPage}>My Page</Link>
         </li>
