@@ -44,3 +44,12 @@ export const memberSettings = pgTable("member_settings", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Everyone who has signed in to foto-log, from their first sign-in. Tells a
+ * new member's first sign-in apart from later ones.
+ */
+export const member = pgTable("member", {
+  did: text("did").primaryKey(),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+});

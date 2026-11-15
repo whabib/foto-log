@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createUserSession, lookupHandle, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
+import { welcomeNewMember } from "@/lib/friends-server";
 import {
   callbackErrorDetails,
   getOAuthClient,
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
     const handle = await lookupHandle(session);
     const cookie = await createUserSession(session.did, handle);
     if (!cookie) return redirectTo("/login?error=failed");
+    await welcomeNewMember({ did: session.did, handle });
     const response = redirectTo("/");
     response.cookies.set(SESSION_COOKIE, cookie, sessionCookieOptions);
     return response;
