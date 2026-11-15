@@ -6,7 +6,8 @@ import { resolveActor } from "@/lib/identity";
 import { memberPageLook } from "@/lib/member-settings";
 import { getMemberSettings } from "@/lib/member-settings-server";
 import { isValidDateKey, photoRecordKey } from "@/lib/photo-record";
-import { fetchPhoto, listPhotos, photoNeighbors } from "@/lib/photos/server";
+import { railWindow } from "@/lib/photos/rail";
+import { fetchPhoto, listPhotos, photoNeighbors, type StoredPhoto } from "@/lib/photos/server";
 import { parseActorParam } from "@/lib/photos/urls";
 
 export const RECENT_PHOTOS = 6;
@@ -35,15 +36,19 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
   if (date && !dayPhoto) return null;
   const photo = date ? dayPhoto : (recent[0] ?? null);
 
-  let older = null;
-  let newer = null;
-  if (photo) {
-    if (!date) {
-      // The newest photo: nothing newer, and the next one in the list is older.
-      older = recent[1] ?? null;
-    } else {
-      ({ older, newer } = await photoNeighbors(owner, photo.rkey));
-    }
+  let older: StoredPhoto | null = null;
+  let newer: StoredPhoto | null = null;
+  let rail = recent;
+  if (photo && !date) {
+    // The newest photo: nothing newer, and the next one in the list is older.
+    older = recent[1] ?? null;
+  } else if (photo) {
+    // Enough on each side to fill the rail around this photo if it's older
+    // than the newest few.
+    const around = await photoNeighbors(owner, photo.rkey, RECENT_PHOTOS - 1);
+    older = around.older[0] ?? null;
+    newer = around.newer[0] ?? null;
+    rail = railWindow(recent, photo, around.newer, around.older, RECENT_PHOTOS);
   }
 
   return {
@@ -51,7 +56,7 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     look: memberPageLook(settings, owner),
     avatar,
     photo,
-    recent,
+    recent: rail,
     older,
     newer,
     isOwner: user?.did === owner.did,
