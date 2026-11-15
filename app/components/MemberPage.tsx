@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import LocalTime from "@/app/components/LocalTime";
 import ShareButton from "@/app/components/ShareButton";
+import Guestbook from "@/app/components/guestbook/Guestbook";
+import type { Guestbook as GuestbookData } from "@/lib/guestbook/entries";
 import DeleteButton from "@/app/[actor]/[date]/DeleteButton";
 import { baseUrl } from "@/lib/config";
 import type { Actor } from "@/lib/identity";
@@ -46,6 +48,7 @@ export type MemberPageProps = {
   recent: StoredPhoto[];
   older: StoredPhoto | null;
   newer: StoredPhoto | null;
+  guestbook: GuestbookData | null;
   isOwner: boolean;
   signedIn: boolean;
 };
@@ -137,6 +140,8 @@ function CenterPhoto({
   older,
   newer,
   isOwner,
+  guestbook,
+  signedIn,
 }: MemberPageProps & { photo: StoredPhoto }) {
   const { record } = photo;
   const bskyUrl = blueskyPostUrl(record.post.uri);
@@ -202,20 +207,13 @@ function CenterPhoto({
         </div>
       )}
 
-      <section className="guestbook" aria-labelledby="guestbook-heading">
-        <h3 id="guestbook-heading" className="rail-heading">
-          Guestbook
-        </h3>
-        <p className="rail-empty">
-          Coming soon.
-          {bskyUrl && (
-            <>
-              {" "}
-              For now, <a href={bskyUrl}>reply on Bluesky</a>.
-            </>
-          )}
-        </p>
-      </section>
+      <Guestbook
+        guestbook={guestbook ?? { entries: [], count: 0, closed: false, gated: false }}
+        ownerDid={owner.did}
+        rkey={photo.rkey}
+        bskyUrl={bskyUrl}
+        signedIn={signedIn}
+      />
     </>
   );
 }

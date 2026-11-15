@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { blueskyAvatar } from "@/lib/bsky-profile";
+import { getGuestbook } from "@/lib/guestbook/server";
 import { resolveActor } from "@/lib/identity";
 import { memberPageLook } from "@/lib/member-settings";
 import { getMemberSettings } from "@/lib/member-settings-server";
@@ -51,8 +52,11 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     rail = railWindow(recent, photo, around.newer, around.older, RECENT_PHOTOS);
   }
 
+  const guestbook = photo ? await getGuestbook(owner.did, photo.record.post.uri) : null;
+
   return {
     owner,
+    guestbook,
     look: memberPageLook(settings, owner),
     avatar,
     photo,

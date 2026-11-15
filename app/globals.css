@@ -475,6 +475,103 @@ body:has(.member-theme) .site-header .link-button:hover {
   margin-top: 28px;
 }
 
+.guestbook-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entry {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--m-rule);
+}
+
+.entry-avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+}
+
+.entry-body {
+  min-width: 0;
+}
+
+.entry .byline {
+  margin: 0 0 4px;
+  font-size: 0.875rem;
+}
+
+.entry .byline a {
+  font-weight: 600;
+}
+
+.entry .said {
+  opacity: 0.8;
+}
+
+.entry-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.guestbook-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.guestbook-form label {
+  font-weight: 600;
+}
+
+.guestbook-form textarea {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--m-rule);
+  border-radius: 6px;
+  background: var(--m-bg);
+  color: var(--m-fg);
+  resize: vertical;
+}
+
+.guestbook-form-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.guestbook-form-row .counter {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.guestbook-form button {
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: 1px solid var(--m-link);
+  border-radius: 6px;
+  background: var(--m-link);
+  color: var(--m-bg);
+  cursor: pointer;
+}
+
+.guestbook-form button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.member-theme .guestbook-form .hint {
+  margin: 0;
+  color: inherit;
+  opacity: 0.75;
+}
+
 .no-photos {
   padding: 48px 0;
   text-align: center;
