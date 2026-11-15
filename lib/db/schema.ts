@@ -30,3 +30,16 @@ export const userSession = pgTable(
   },
   (t) => [index("user_session_did_idx").on(t.did)],
 );
+
+/** How a member's member page looks. Null columns mean the site default. */
+export const memberSettings = pgTable("member_settings", {
+  did: text("did").primaryKey(),
+  title: text("title"),
+  country: text("country"),
+  region: text("region"),
+  locality: text("locality"),
+  backgroundColor: text("background_color"),
+  textColor: text("text_color"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

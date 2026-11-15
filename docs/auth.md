@@ -38,6 +38,8 @@ All in Postgres (`lib/db/schema.ts`):
 - `oauth_session`: token sets and DPoP keys, one row per account DID.
 - `user_session`: one row per signed-in browser, expires after 30 days.
 
+(`member_settings`, the member page settings, is in the same database; see [plan.md](plan.md#member-page-settings-postgres-not-atproto).)
+
 `oauth_state.value` and `oauth_session.value` are encrypted with AES-256-GCM (`lib/crypto.ts`), using the row key as associated data so a value can't be copied to another row. Token refreshes take a Postgres advisory lock, so two Cloud Run instances never refresh the same session at once.
 
 ## Cookie

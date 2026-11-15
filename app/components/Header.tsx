@@ -12,8 +12,10 @@ export default async function Header() {
       {user ? (
         <form action={signOut} className="account">
           <Link href="/post">Post a photo</Link>
-          <span>
-            Signed in as <strong>{user.handle ? `@${user.handle}` : user.did}</strong>
+          <Link href="/settings">Settings</Link>
+          <span className="signed-in">
+            <span className="signed-in-label">Signed in as </span>
+            <strong>{user.handle ? `@${user.handle}` : user.did}</strong>
           </span>
           <button type="submit" className="link-button">
             Sign out

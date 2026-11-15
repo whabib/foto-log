@@ -1,0 +1,11 @@
+CREATE TABLE "member_settings" (
+	"did" text PRIMARY KEY NOT NULL,
+	"title" text,
+	"country" text,
+	"region" text,
+	"locality" text,
+	"background_color" text,
+	"text_color" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
