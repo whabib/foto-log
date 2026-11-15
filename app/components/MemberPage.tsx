@@ -10,7 +10,8 @@ import type { Actor } from "@/lib/identity";
 import { isHexColor, type MemberPageLook } from "@/lib/member-settings";
 import { parsePhotoRecordKey } from "@/lib/photo-record";
 import type { StoredPhoto } from "@/lib/photos/server";
-import { blueskyPostUrl, imageUrl, memberPath, photoPath, thumbnailUrl } from "@/lib/photos/urls";
+import type { MemberImages } from "@/lib/member-profile";
+import { blueskyPostUrl, imageUrl, memberImageUrl, memberPath, photoPath, thumbnailUrl } from "@/lib/photos/urls";
 
 /** Formats a YYYY-MM-DD calendar date, e.g. "October 14, 2026". It's a date, not an instant. */
 export function formatDay(date: string) {
@@ -49,13 +50,16 @@ export type MemberPageProps = {
   older: StoredPhoto | null;
   newer: StoredPhoto | null;
   guestbook: GuestbookData | null;
+  /** Images from the member's com.foto-log.profile record. */
+  images?: MemberImages;
   isOwner: boolean;
   signBlocked?: string | null;
   signedIn: boolean;
 };
 
 export default function MemberPage(props: MemberPageProps) {
-  const { owner, look, avatar, photo, recent, older, newer, isOwner, signedIn } = props;
+  const { owner, look, avatar, photo, recent, older, newer, isOwner, signedIn, images } = props;
+  const titleImage = images?.titleImage ?? null;
   const who = owner.handle ?? owner.did;
   const theme = {
     "--m-bg": look.backgroundColor,
@@ -73,8 +77,22 @@ export default function MemberPage(props: MemberPageProps) {
     <div className="member-theme" style={theme}>
       {headerStyle && <style>{headerStyle}</style>}
       <div className="member-box">
-        <header className="member-title">
-          <h1>{look.title}</h1>
+        <header className={titleImage ? "member-title has-image" : "member-title"}>
+          <h1>
+            {titleImage ? (
+              // The text title is the alt text, so it shows if the image doesn't load.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                className="title-image"
+                src={memberImageUrl(owner.did, titleImage.cid)}
+                alt={look.title}
+                width={titleImage.width ?? undefined}
+                height={titleImage.height ?? undefined}
+              />
+            ) : (
+              look.title
+            )}
+          </h1>
         </header>
 
         <div className="member-cols">

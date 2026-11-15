@@ -24,6 +24,14 @@ export function imageUrl(did: string, cid: string): string {
   return `https://cdn.bsky.app/img/feed_fullsize/plain/${did}/${cid}@jpeg`;
 }
 
+/**
+ * A member page image (title image, wallpaper, profile photo) from the
+ * member's repo, served by the Bluesky CDN like photos.
+ */
+export function memberImageUrl(did: string, cid: string): string {
+  return imageUrl(did, cid);
+}
+
 /** The post's page on bsky.app. */
 export function blueskyPostUrl(postUri: string): string | null {
   const m = /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(postUri);

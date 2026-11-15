@@ -520,6 +520,69 @@ export const schemaDict = {
       },
     },
   },
+  ComFotoLogProfile: {
+    lexicon: 1,
+    id: 'com.foto-log.profile',
+    description:
+      "How a member's fotolog page looks on foto-log.com: images the member uploaded for it.",
+    defs: {
+      main: {
+        type: 'record',
+        description:
+          "One per member, with the record key 'self'. Every field is optional; a missing field means the member hasn't set that image.",
+        key: 'literal:self',
+        record: {
+          type: 'object',
+          required: ['updatedAt'],
+          properties: {
+            titleImage: {
+              type: 'ref',
+              ref: 'lex:com.foto-log.profile#image',
+              description:
+                'Shown across the top of the member page in place of the text title.',
+            },
+            wallpaper: {
+              type: 'ref',
+              ref: 'lex:com.foto-log.profile#image',
+              description: 'Fills the page behind and around the member page.',
+            },
+            wallpaperMode: {
+              type: 'string',
+              description:
+                "How the wallpaper fills the page: 'tile' repeats it at its natural size, 'fill' covers the window.",
+              knownValues: ['tile', 'fill'],
+              maxLength: 32,
+            },
+            avatar: {
+              type: 'ref',
+              ref: 'lex:com.foto-log.profile#image',
+              description:
+                "The member's profile photo on foto-log.com, in place of their Bluesky avatar.",
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'datetime',
+            },
+          },
+        },
+      },
+      image: {
+        type: 'object',
+        required: ['image'],
+        properties: {
+          image: {
+            type: 'blob',
+            accept: ['image/*'],
+            maxSize: 1000000,
+          },
+          aspectRatio: {
+            type: 'ref',
+            ref: 'lex:com.foto-log.photo#aspectRatio',
+          },
+        },
+      },
+    },
+  },
 } as const satisfies Record<string, LexiconDoc>
 export const schemas = Object.values(schemaDict) satisfies LexiconDoc[]
 export const lexicons: Lexicons = new Lexicons(schemas)
@@ -561,4 +624,5 @@ export const ids = {
   ComAtprotoRepoPutRecord: 'com.atproto.repo.putRecord',
   ComAtprotoRepoStrongRef: 'com.atproto.repo.strongRef',
   ComFotoLogPhoto: 'com.foto-log.photo',
+  ComFotoLogProfile: 'com.foto-log.profile',
 } as const

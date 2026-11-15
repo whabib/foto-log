@@ -4,6 +4,7 @@ import { startTransition, useActionState, useState } from "react";
 import { formatLocation, isRegionCode, regionLabel, regionOptions } from "@/lib/geo";
 import { contrastRatio, isHexColor, MIN_CONTRAST } from "@/lib/member-settings";
 import { resetSettings, type SaveState, saveSettings } from "./actions";
+import TitleImageForm from "./TitleImageForm";
 
 type Values = {
   title: string;
@@ -20,6 +21,8 @@ type Props = {
   defaults: { title: string; backgroundColor: string; textColor: string };
   countries: { code: string; name: string }[];
   hasSaved: boolean;
+  /** The saved title image's URL, if any; undefined if images couldn't be loaded. */
+  titleImage?: string | null;
 };
 
 function ColorField({
@@ -69,7 +72,7 @@ function ColorField({
   );
 }
 
-export default function SettingsForm({ initial, defaults, countries, hasSaved }: Props) {
+export default function SettingsForm({ initial, defaults, countries, hasSaved, titleImage }: Props) {
   const [values, setValues] = useState<Values>(initial);
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveSettings, {
     status: "idle",
@@ -124,6 +127,14 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved }:
           <p className="hint">Leave blank to use &ldquo;{defaults.title}&rdquo;.</p>
           {errors.title && <p className="field-error">{errors.title}</p>}
         </div>
+
+        {titleImage !== undefined && (
+          <TitleImageForm
+            current={titleImage}
+            title={values.title.trim() || defaults.title}
+            background={isHexColor(values.backgroundColor) ? values.backgroundColor : defaults.backgroundColor}
+          />
+        )}
 
         <fieldset className="field">
           <legend>Location</legend>

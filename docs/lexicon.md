@@ -39,3 +39,32 @@ ATProto lexicons have to stay backward compatible once records exist: no new req
 ## Publishing
 
 The lexicon isn't published for automatic resolution yet. That needs a foto-log account DID to hold the schema record and a `_lexicon.foto-log.com` TXT record. Tracked in a follow-up issue.
+
+# Lexicon: `com.foto-log.profile`
+
+Images a member uploads to customize their fotolog page live in a `com.foto-log.profile` record in their own repo, so they survive without foto-log.com. The record also keeps the blobs referenced, so the PDS doesn't garbage-collect them. The schema is in [`lexicons/com/foto-log/profile.json`](../lexicons/com/foto-log/profile.json).
+
+## Record key
+
+`self`: one record per member.
+
+## Fields
+
+| Field | Required | Notes |
+|---|---|---|
+| `titleImage` | no | `#image`. Shown across the top of the member page in place of the text title. |
+| `wallpaper` | no | `#image`. Fills the page around the member page. |
+| `wallpaperMode` | no | `tile` (repeat at natural size) or `fill` (cover the window). Anything else reads as `tile`. |
+| `avatar` | no | `#image`. The member's profile photo on foto-log.com, in place of their Bluesky avatar. |
+| `updatedAt` | yes | ATProto datetime. |
+
+`#image` is `{ image, aspectRatio? }`: an `image/*` blob of at most 1,000,000 bytes, and its width and height (`com.foto-log.photo#aspectRatio`). A missing field means the member hasn't set that image; removing an image deletes its field.
+
+## Code
+
+- `lib/member-profile.ts`: `memberImagesFromRecord()` turns a record into the images to show, treating anything invalid as unset.
+- `lib/member-profile-server.ts`:
+  - `getMemberImages()` reads the record from the member's PDS, cached for a minute.
+  - `setMemberImage()` uploads a blob and sets one field, or clears it. It keeps the other fields and uses `swapRecord` so concurrent changes don't overwrite each other.
+- Images are served from the Bluesky CDN, like photos (`memberImageUrl`).
+- Writing the record needs the `repo:com.foto-log.profile` OAuth scope. Members who signed in before it was added are asked to sign in again.

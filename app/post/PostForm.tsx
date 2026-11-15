@@ -3,55 +3,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { type PreparedImage, prepareImage } from "@/lib/client/prepare-image";
 
-const MAX_EDGE = 2000;
-const TARGET_BYTES = 950_000;
 const MAX_ALT = 1000;
 
-type Prepared = { blob: Blob; width: number; height: number; url: string };
+type Prepared = PreparedImage;
 
 const segmenter = typeof Intl !== "undefined" ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
 function graphemes(text: string): number {
   return segmenter ? Array.from(segmenter.segment(text)).length : [...text].length;
-}
-
-function toJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", quality),
-  );
-}
-
-/**
- * Resizes to at most 2000px on the long edge and re-encodes as JPEG under
- * ~1 MB. Re-encoding through a canvas drops all metadata, including EXIF
- * and GPS location; the orientation is applied to the pixels first.
- */
-async function prepareImage(file: File): Promise<Prepared> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-  let scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  try {
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const width = Math.max(1, Math.round(bitmap.width * scale));
-      const height = Math.max(1, Math.round(bitmap.height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#fff"; // flatten transparency
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(bitmap, 0, 0, width, height);
-      for (const quality of [0.9, 0.82, 0.75, 0.65]) {
-        const blob = await toJpeg(canvas, quality);
-        if (blob.size <= TARGET_BYTES) {
-          return { blob, width, height, url: URL.createObjectURL(blob) };
-        }
-      }
-      scale *= 0.8;
-    }
-  } finally {
-    bitmap.close();
-  }
-  throw new Error("too large");
 }
 
 type Status =

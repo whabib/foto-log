@@ -8,7 +8,10 @@ import {
   defaultTitle,
   EMPTY_SETTINGS,
 } from "@/lib/member-settings";
+import { getMemberImages } from "@/lib/member-profile-server";
 import { getMemberSettings } from "@/lib/member-settings-server";
+import { resolveActor } from "@/lib/identity";
+import { memberImageUrl } from "@/lib/photos/urls";
 import { currentIdentity } from "@/lib/photos/server";
 import SettingsForm from "./SettingsForm";
 
@@ -17,11 +20,13 @@ export const metadata: Metadata = { title: "Settings · foto-log" };
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const [identity, saved, { reset }] = await Promise.all([
+  const [identity, saved, { reset }, actor] = await Promise.all([
     currentIdentity(user),
     getMemberSettings(user.did),
     searchParams,
+    resolveActor(user.did),
   ]);
+  const images = actor ? await getMemberImages(actor, { fresh: true }) : null;
   const s = saved ?? EMPTY_SETTINGS;
 
   return (
@@ -50,6 +55,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           }}
           countries={countryOptions()}
           hasSaved={saved !== null}
+          titleImage={images ? (images.titleImage ? memberImageUrl(user.did, images.titleImage.cid) : null) : undefined}
         />
       </section>
     </main>
