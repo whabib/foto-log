@@ -49,7 +49,7 @@ export type PhotoInput = {
   timeZone: string;
 };
 
-async function agentFor(did: string): Promise<Agent> {
+export async function agentFor(did: string): Promise<Agent> {
   try {
     const client = await getOAuthClient();
     return new Agent(await client.restore(did));
