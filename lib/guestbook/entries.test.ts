@@ -6,6 +6,7 @@ import {
   parseGuestbook,
   parsePostUri,
   parseThreadReplies,
+  WHO_CAN_SIGN_CHOICES,
   whoCanSign,
 } from "./entries";
 
@@ -120,8 +121,15 @@ describe("whoCanSign", () => {
     expect(whoCanSign("nonsense")).toBe("custom");
   });
 
+  it("reads followers and following rules in either order", () => {
+    const followers = { $type: "app.bsky.feed.threadgate#followerRule" };
+    expect(whoCanSign([followers])).toBe("followers");
+    expect(whoCanSign([following, followers])).toBe("followers+following");
+    expect(whoCanSign([followers, followers])).toBe("custom");
+  });
+
   it("round-trips each choice through allowRules", () => {
-    for (const who of ["everyone", "following", "nobody"] as const) {
+    for (const who of WHO_CAN_SIGN_CHOICES) {
       expect(whoCanSign(allowRules(who))).toBe(who);
     }
   });

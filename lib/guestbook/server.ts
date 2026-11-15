@@ -304,26 +304,30 @@ export async function setWhoCanSign(user: CurrentUser, ownerDid: string, postUri
   await asOwner(() => updateGate(target, (gate) => ({ ...gate, allow: allowRules(who) })));
 }
 
-const followCache = new TtlCache<string, boolean>(60_000, 5000);
+type Relationship = { followedByOwner: boolean; followsOwner: boolean };
+const relationships = new TtlCache<string, Relationship>(60_000, 5000);
 
-/** Whether `ownerDid` follows `did`, from Bluesky's public AppView. False if unknown. */
-async function follows(ownerDid: string, did: string): Promise<boolean> {
+/** How `ownerDid` and `did` follow each other, from Bluesky's public AppView. Null if unknown. */
+async function relationship(ownerDid: string, did: string): Promise<Relationship | null> {
   const key = `${ownerDid} ${did}`;
-  const cached = followCache.get(key);
+  const cached = relationships.get(key);
   if (cached) return cached.value;
   const url = new URL("/xrpc/app.bsky.graph.getRelationships", APPVIEW);
   url.searchParams.set("actor", ownerDid);
   url.searchParams.append("others", did);
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(5000), cache: "no-store" });
-    if (!res.ok) return false;
-    const body = (await res.json()) as { relationships?: { did?: string; following?: unknown }[] };
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      relationships?: { did?: string; following?: unknown; followedBy?: unknown }[];
+    };
     const rel = body.relationships?.find((r) => r.did === did);
-    const result = typeof rel?.following === "string";
-    followCache.set(key, result);
+    // `following`: the owner follows them; `followedBy`: they follow the owner.
+    const result = { followedByOwner: typeof rel?.following === "string", followsOwner: typeof rel?.followedBy === "string" };
+    relationships.set(key, result);
     return result;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -333,18 +337,26 @@ async function follows(ownerDid: string, did: string): Promise<boolean> {
  */
 export async function mayReply(guestbook: Guestbook, ownerDid: string, did: string): Promise<boolean> {
   if (did === ownerDid) return true;
-  switch (guestbook.who) {
-    case "everyone":
-      return true;
-    case "following":
-      return follows(ownerDid, did);
-    default:
-      return false;
-  }
+  const who = guestbook.who;
+  if (who === "everyone") return true;
+  if (who === "nobody" || who === "custom") return false;
+  const rel = await relationship(ownerDid, did);
+  if (!rel) return false;
+  return (
+    ((who === "followers" || who === "followers+following") && rel.followsOwner) ||
+    ((who === "following" || who === "followers+following") && rel.followedByOwner)
+  );
 }
 
 export function notAllowedMessage(guestbook: Guestbook): string {
-  return guestbook.who === "following"
-    ? "Only people this member follows can sign this guestbook."
-    : "This guestbook only takes entries from some people. You can try replying on Bluesky.";
+  switch (guestbook.who) {
+    case "followers":
+      return "Only this member's followers can comment.";
+    case "following":
+      return "Only people this member follows can comment.";
+    case "followers+following":
+      return "Only this member's followers and people they follow can comment.";
+    default:
+      return "Only some people can comment here. You can try replying on Bluesky.";
+  }
 }

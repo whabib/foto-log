@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { RichText } from "@atproto/api";
 import LocalTime from "@/app/components/LocalTime";
-import { DEFAULT_GUESTBOOK_CAP, type Guestbook as GuestbookData, type GuestbookEntry } from "@/lib/guestbook/entries";
+import {
+  DEFAULT_GUESTBOOK_CAP,
+  type Guestbook as GuestbookData,
+  type GuestbookEntry,
+  WHO_CAN_SIGN_LABELS,
+} from "@/lib/guestbook/entries";
 import { memberPath } from "@/lib/photos/urls";
 import HideButton from "./HideButton";
 import SignForm from "./SignForm";
-import WhoCanSignForm from "./WhoCanSignForm";
+import CommentSettings from "./CommentSettings";
 
 /** An entry's text with its links made clickable. Only http(s) links are linked. */
 function EntryText({ entry }: { entry: GuestbookEntry }) {
@@ -49,9 +54,21 @@ export default function Guestbook({
   const full = count >= DEFAULT_GUESTBOOK_CAP;
   return (
     <section className="guestbook" aria-labelledby="guestbook-heading">
-      <h3 id="guestbook-heading" className="rail-heading">
-        Guestbook Comments ({entries.length})
-      </h3>
+      <div className="guestbook-heading">
+        <h3 id="guestbook-heading" className="rail-heading">
+          Guestbook Comments ({entries.length})
+        </h3>
+        <div className="who-can-comment">
+          {full ? (
+            "Guestbook full"
+          ) : (
+            <>
+              Who can comment: {WHO_CAN_SIGN_LABELS[guestbook.who]}
+              {isOwner && <CommentSettings ownerDid={ownerDid} rkey={rkey} who={guestbook.who} />}
+            </>
+          )}
+        </div>
+      </div>
       {entries.length === 0 && <p className="rail-empty">No entries yet. Be the first to sign!</p>}
       <ol className="guestbook-entries">
         {entries.map((e) => (
@@ -85,7 +102,6 @@ export default function Guestbook({
           More replies are on <a href={bskyUrl ?? "#"}>Bluesky</a>.
         </p>
       )}
-      {isOwner && !full && <WhoCanSignForm ownerDid={ownerDid} rkey={rkey} who={guestbook.who} />}
       {full ? (
         <p className="rail-empty">This guestbook is full.</p>
       ) : closed && !isOwner ? (

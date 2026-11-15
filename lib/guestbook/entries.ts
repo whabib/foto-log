@@ -26,28 +26,52 @@ export type Guestbook = {
 
 /**
  * Who may sign a guestbook, from the photo post's threadgate. "custom" is
- * any other mix of rules, such as one set in a Bluesky app.
+ * any other mix of rules, such as mentions or lists set in a Bluesky app.
  */
-export type WhoCanSign = "everyone" | "following" | "nobody" | "custom";
-export const WHO_CAN_SIGN_CHOICES = ["everyone", "following", "nobody"] as const;
+export type WhoCanSign = "everyone" | "nobody" | "followers" | "following" | "followers+following" | "custom";
+export const WHO_CAN_SIGN_CHOICES = ["everyone", "nobody", "followers", "following", "followers+following"] as const;
 export type WhoCanSignChoice = (typeof WHO_CAN_SIGN_CHOICES)[number];
 
+export const FOLLOWER_RULE = "app.bsky.feed.threadgate#followerRule";
 export const FOLLOWING_RULE = "app.bsky.feed.threadgate#followingRule";
+
+/** How each setting reads in "Who can comment: …". */
+export const WHO_CAN_SIGN_LABELS: Record<WhoCanSign, string> = {
+  everyone: "Everyone",
+  nobody: "Nobody",
+  followers: "Followers",
+  following: "People I follow",
+  "followers+following": "Followers & people I follow",
+  custom: "Set in Bluesky",
+};
 
 /** Reads a threadgate's `allow` list. No list means everyone may reply. */
 export function whoCanSign(allow: unknown): WhoCanSign {
   if (allow === undefined || allow === null) return "everyone";
   if (!Array.isArray(allow)) return "custom";
   if (allow.length === 0) return "nobody";
-  if (allow.length === 1 && isObj(allow[0]) && allow[0].$type === FOLLOWING_RULE) return "following";
-  return "custom";
+  const types = new Set(allow.map((r) => (isObj(r) ? r.$type : null)));
+  if (types.size !== allow.length) return "custom";
+  const followers = types.delete(FOLLOWER_RULE);
+  const following = types.delete(FOLLOWING_RULE);
+  if (types.size > 0) return "custom";
+  return followers && following ? "followers+following" : followers ? "followers" : "following";
 }
 
 /** The threadgate `allow` list for a choice; undefined means everyone. */
 export function allowRules(who: WhoCanSignChoice): { $type: string }[] | undefined {
-  if (who === "everyone") return undefined;
-  if (who === "nobody") return [];
-  return [{ $type: FOLLOWING_RULE }];
+  switch (who) {
+    case "everyone":
+      return undefined;
+    case "nobody":
+      return [];
+    case "followers":
+      return [{ $type: FOLLOWER_RULE }];
+    case "following":
+      return [{ $type: FOLLOWING_RULE }];
+    case "followers+following":
+      return [{ $type: FOLLOWER_RULE }, { $type: FOLLOWING_RULE }];
+  }
 }
 
 /** What the AppView says about a thread, before the cap is applied. */
