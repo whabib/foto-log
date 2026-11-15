@@ -18,7 +18,12 @@ export type Guestbook = {
   count: number;
   /** True once a threadgate allows nobody to reply, or the cap is reached. */
   closed: boolean;
+  /** True when the post's threadgate allows nobody to reply. */
+  gated: boolean;
 };
+
+/** What the AppView says about a thread, before the cap is applied. */
+export type ThreadReplies = { entries: GuestbookEntry[]; gated: boolean };
 
 /** Labels that mean a post shouldn't be shown at all. */
 const HIDING_LABELS = new Set(["!hide", "!takedown", "!suspend"]);
@@ -32,14 +37,16 @@ const str = (v: unknown) => (typeof v === "string" ? v : null);
  * direct replies to the photo's post, oldest first, without replies the
  * owner hid, blocked or deleted ones, or posts labeled to be hidden.
  */
-export function parseGuestbook(body: unknown, cap = DEFAULT_GUESTBOOK_CAP): Guestbook {
+export function parseThreadReplies(body: unknown): ThreadReplies {
   const thread = isObj(body) && isObj(body.thread) ? body.thread : null;
   if (!thread || thread.$type !== "app.bsky.feed.defs#threadViewPost") {
-    return { entries: [], count: 0, closed: false };
+    return { entries: [], gated: false };
   }
-  const gate = isObj(thread.threadgate) && isObj(thread.threadgate.record) ? thread.threadgate.record : null;
+  // The threadgate view is part of the root post's view.
+  const gateView = isObj(thread.post) && isObj(thread.post.threadgate) ? thread.post.threadgate : null;
+  const gate = gateView && isObj(gateView.record) ? gateView.record : null;
   const hidden = new Set(Array.isArray(gate?.hiddenReplies) ? gate.hiddenReplies.filter((u) => typeof u === "string") : []);
-  const closed = Array.isArray(gate?.allow) && gate.allow.length === 0;
+  const gated = Array.isArray(gate?.allow) && gate.allow.length === 0;
 
   const replies = Array.isArray(thread.replies) ? thread.replies : [];
   const entries: GuestbookEntry[] = [];
@@ -70,8 +77,35 @@ export function parseGuestbook(body: unknown, cap = DEFAULT_GUESTBOOK_CAP): Gues
       createdAt: str(record.createdAt) ?? str(post.indexedAt) ?? "",
     });
   }
-  entries.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.uri.localeCompare(b.uri));
+  return { entries: sortEntries(entries), gated };
+}
+
+function sortEntries(entries: GuestbookEntry[]): GuestbookEntry[] {
+  return entries.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.uri.localeCompare(b.uri));
+}
+
+/**
+ * The guestbook to show: the AppView's replies plus any signed from this
+ * site that it hasn't indexed yet, oldest first, up to `cap`.
+ */
+export function buildGuestbook(
+  thread: ThreadReplies,
+  pending: GuestbookEntry[] = [],
+  cap = DEFAULT_GUESTBOOK_CAP,
+): Guestbook {
+  const seen = new Set(thread.entries.map((e) => e.uri));
+  const entries = sortEntries([...thread.entries, ...pending.filter((e) => !seen.has(e.uri))]);
   // Replies past the cap may slip in before the threadgate lands; they stay
   // on Bluesky but aren't shown here.
-  return { entries: entries.slice(0, cap), count: entries.length, closed: closed || entries.length >= cap };
+  return {
+    entries: entries.slice(0, cap),
+    count: entries.length,
+    closed: thread.gated || entries.length >= cap,
+    gated: thread.gated,
+  };
+}
+
+/** Parses a getPostThread response straight into a guestbook. */
+export function parseGuestbook(body: unknown, cap = DEFAULT_GUESTBOOK_CAP): Guestbook {
+  return buildGuestbook(parseThreadReplies(body), [], cap);
 }

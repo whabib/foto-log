@@ -52,7 +52,7 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     rail = railWindow(recent, photo, around.newer, around.older, RECENT_PHOTOS);
   }
 
-  const guestbook = photo ? await getGuestbook(photo.record.post.uri) : null;
+  const guestbook = photo ? await getGuestbook(owner.did, photo.record.post.uri) : null;
 
   return {
     owner,

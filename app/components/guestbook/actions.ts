@@ -10,8 +10,9 @@ export type SignState = { status: "idle" } | { status: "signed" } | { status: "e
 
 /**
  * Signs the guestbook of `ownerDid`'s photo `rkey` as the signed-in user.
- * The reply target comes from the photo record itself, not the form, so
- * this can only reply to foto-log photo posts.
+ * The reply target comes from the photo record itself, not the form, and
+ * must be a post in the owner's own repository, so this can only reply to
+ * that member's foto-log photo posts.
  */
 export async function signGuestbookAction(
   ownerDid: string,
@@ -26,7 +27,7 @@ export async function signGuestbookAction(
   const photo = owner ? await fetchPhoto(owner, rkey) : null;
   if (!photo) return { status: "error", message: "That photo can't be found." };
   try {
-    await signGuestbook(user, photo.record.post, String(form.get("text") ?? ""));
+    await signGuestbook(user, owner!.did, photo.record.post, String(form.get("text") ?? ""));
   } catch (err) {
     if (err instanceof GuestbookError) {
       return { status: "error", message: err.message, login: err.code === "session_expired" };

@@ -208,7 +208,7 @@ function CenterPhoto({
       )}
 
       <Guestbook
-        guestbook={guestbook ?? { entries: [], count: 0, closed: false }}
+        guestbook={guestbook ?? { entries: [], count: 0, closed: false, gated: false }}
         ownerDid={owner.did}
         rkey={photo.rkey}
         bskyUrl={bskyUrl}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGuestbook } from "./entries";
+import { buildGuestbook, parseGuestbook, parseThreadReplies } from "./entries";
 
 const reply = (n: number, createdAt: string, extra: Record<string, unknown> = {}) => ({
   $type: "app.bsky.feed.defs#threadViewPost",
@@ -13,7 +13,7 @@ const reply = (n: number, createdAt: string, extra: Record<string, unknown> = {}
   },
 });
 const thread = (replies: unknown[], threadgate?: unknown) => ({
-  thread: { $type: "app.bsky.feed.defs#threadViewPost", post: {}, replies, threadgate },
+  thread: { $type: "app.bsky.feed.defs#threadViewPost", post: { threadgate }, replies },
 });
 
 describe("parseGuestbook", () => {
@@ -59,6 +59,27 @@ describe("parseGuestbook", () => {
       entries: [],
       count: 0,
       closed: false,
+      gated: false,
     });
+  });
+
+  it("is gated only by a threadgate that allows nobody", () => {
+    expect(parseGuestbook(thread([], { record: { allow: [] } })).gated).toBe(true);
+    expect(parseGuestbook(thread([], { record: { allow: [{ $type: "x" }] } })).gated).toBe(false);
+  });
+});
+
+describe("buildGuestbook", () => {
+  it("adds pending site entries the AppView hasn't indexed, without duplicates", () => {
+    const indexed = parseThreadReplies(thread([reply(1, "2026-11-15T09:00:00Z"), reply(2, "2026-11-15T09:01:00Z")]));
+    const pending = [
+      parseThreadReplies(thread([reply(2, "2026-11-15T09:01:00Z")])).entries[0],
+      parseThreadReplies(thread([reply(3, "2026-11-15T09:02:00Z")])).entries[0],
+    ];
+    const g = buildGuestbook(indexed, pending, 3);
+    expect(g.entries.map((e) => e.text)).toEqual(["hello 1", "hello 2", "hello 3"]);
+    expect(g.count).toBe(3);
+    expect(g.closed).toBe(true);
+    expect(g.gated).toBe(false);
   });
 });
