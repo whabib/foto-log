@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGuestbook, parseGuestbook, parseThreadReplies } from "./entries";
+import { buildGuestbook, parseGuestbook, parsePostUri, parseThreadReplies } from "./entries";
 
 const reply = (n: number, createdAt: string, extra: Record<string, unknown> = {}) => ({
   $type: "app.bsky.feed.defs#threadViewPost",
@@ -81,5 +81,21 @@ describe("buildGuestbook", () => {
     expect(g.count).toBe(3);
     expect(g.closed).toBe(true);
     expect(g.gated).toBe(false);
+  });
+});
+
+describe("parsePostUri", () => {
+  it("splits a post URI into its repo DID and record key", () => {
+    expect(parsePostUri("at://did:plc:abc123/app.bsky.feed.post/3kxyz")).toEqual({
+      did: "did:plc:abc123",
+      rkey: "3kxyz",
+    });
+  });
+
+  it("rejects URIs that aren't posts, so the owner check can't be fooled", () => {
+    expect(parsePostUri("at://did:plc:abc123/app.bsky.feed.like/3kxyz")).toBeNull();
+    expect(parsePostUri("at://alice.test/app.bsky.feed.post/3kxyz")).toBeNull();
+    expect(parsePostUri("at://did:plc:abc123/app.bsky.feed.post/3kxyz/extra")).toBeNull();
+    expect(parsePostUri("https://bsky.app/profile/did:plc:abc123/post/3kxyz")).toBeNull();
   });
 });

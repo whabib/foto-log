@@ -10,6 +10,7 @@ import {
   type Guestbook,
   type GuestbookEntry,
   MAX_ENTRY_GRAPHEMES,
+  parsePostUri,
   parseThreadReplies,
   type ThreadReplies,
 } from "./entries";
@@ -24,12 +25,6 @@ const threads = new TtlCache<string, ThreadReplies>(30_000, 2000);
 const pending = new TtlCache<string, GuestbookEntry[]>(10 * 60_000, 2000);
 // Posts we recently tried to close, so reads don't retry on every view.
 const closeAttempts = new TtlCache<string, true>(10 * 60_000, 2000);
-
-/** Splits an AT URI for a post into its repo DID and record key. */
-export function parsePostUri(uri: string): { did: string; rkey: string } | null {
-  const m = /^at:\/\/(did:[^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(uri);
-  return m ? { did: m[1], rkey: m[2] } : null;
-}
 
 async function fetchThread(postUri: string): Promise<ThreadReplies | null> {
   const url = new URL("/xrpc/app.bsky.feed.getPostThread", APPVIEW);

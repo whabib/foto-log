@@ -109,3 +109,9 @@ export function buildGuestbook(
 export function parseGuestbook(body: unknown, cap = DEFAULT_GUESTBOOK_CAP): Guestbook {
   return buildGuestbook(parseThreadReplies(body), [], cap);
 }
+
+/** Splits an AT URI for a post into its repo DID and record key. */
+export function parsePostUri(uri: string): { did: string; rkey: string } | null {
+  const m = /^at:\/\/(did:[^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(uri);
+  return m ? { did: m[1], rkey: m[2] } : null;
+}
