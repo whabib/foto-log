@@ -29,3 +29,13 @@ export function blueskyPostUrl(postUri: string): string | null {
   const m = /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(postUri);
   return m ? `https://bsky.app/profile/${m[1]}/post/${m[2]}` : null;
 }
+
+/** Thumbnail image URL on Bluesky's CDN. */
+export function thumbnailUrl(did: string, cid: string): string {
+  return `https://cdn.bsky.app/img/feed_thumbnail/plain/${did}/${cid}@jpeg`;
+}
+
+/** Path of a member's member page, e.g. /@alice.bsky.social. */
+export function memberPath(actor: { did: string; handle: string | null }): string {
+  return actor.handle ? `/@${actor.handle}` : `/${actor.did}`;
+}

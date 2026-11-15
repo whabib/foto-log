@@ -16,6 +16,7 @@ export type MemberSettings = {
   locality: string | null;
   backgroundColor: string | null;
   textColor: string | null;
+  linkColor: string | null;
 };
 
 export const EMPTY_SETTINGS: MemberSettings = {
@@ -25,6 +26,7 @@ export const EMPTY_SETTINGS: MemberSettings = {
   locality: null,
   backgroundColor: null,
   textColor: null,
+  linkColor: null,
 };
 
 export type SettingsField = keyof MemberSettings;
@@ -77,7 +79,7 @@ export function validateMemberSettings(
   if ((region || locality) && !country) errors.country = "Choose a country for this location.";
   if (!country) region = null;
 
-  const color = (field: "backgroundColor" | "textColor") => {
+  const color = (field: "backgroundColor" | "textColor" | "linkColor") => {
     const v = clean(input[field]);
     if (v && !isHexColor(v)) {
       errors[field] = "Use a hex color like #1a1a1a.";
@@ -87,9 +89,10 @@ export function validateMemberSettings(
   };
   const backgroundColor = color("backgroundColor");
   const textColor = color("textColor");
+  const linkColor = color("linkColor");
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
-  return { ok: true, value: { title, country, region, locality, backgroundColor, textColor } };
+  return { ok: true, value: { title, country, region, locality, backgroundColor, textColor, linkColor } };
 }
 
 function luminance(hex: string): number {
@@ -112,6 +115,8 @@ export type MemberPageLook = {
   location: string | null;
   backgroundColor: string;
   textColor: string;
+  /** Links; hovering shows them in the text color. */
+  linkColor: string;
 };
 
 export function memberPageLook(
@@ -126,5 +131,7 @@ export function memberPageLook(
       : null,
     backgroundColor: s.backgroundColor ?? DEFAULT_BACKGROUND_COLOR,
     textColor: s.textColor ?? DEFAULT_TEXT_COLOR,
+    // Unset, links match the text, as they did before this setting existed.
+    linkColor: s.linkColor ?? s.textColor ?? DEFAULT_TEXT_COLOR,
   };
 }

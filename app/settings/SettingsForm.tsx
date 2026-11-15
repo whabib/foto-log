@@ -12,6 +12,7 @@ type Values = {
   locality: string;
   backgroundColor: string;
   textColor: string;
+  linkColor: string;
 };
 
 type Props = {
@@ -29,7 +30,7 @@ function ColorField({
   error,
   onChange,
 }: {
-  id: "backgroundColor" | "textColor";
+  id: "backgroundColor" | "textColor" | "linkColor";
   label: string;
   value: string;
   fallback: string;
@@ -85,7 +86,10 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved }:
   const regions = regionOptions(values.country);
   const bg = isHexColor(values.backgroundColor) ? values.backgroundColor : defaults.backgroundColor;
   const fg = isHexColor(values.textColor) ? values.textColor : defaults.textColor;
+  // Blank link color means "same as the text".
+  const link = isHexColor(values.linkColor) ? values.linkColor : fg;
   const ratio = contrastRatio(bg, fg);
+  const linkRatio = contrastRatio(bg, link);
   const previewLocation =
     values.country && (!regions || !values.region || isRegionCode(values.country, values.region))
       ? formatLocation({
@@ -191,16 +195,26 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved }:
           error={errors.textColor}
           onChange={set("textColor")}
         />
+        <ColorField
+          id="linkColor"
+          label="Link color"
+          value={values.linkColor}
+          fallback={fg}
+          error={errors.linkColor}
+          onChange={set("linkColor")}
+        />
+        <p className="hint">Leave the link color blank to match the text. Links show in the text color when hovered.</p>
 
         <div className="field">
           <span className="label">Preview</span>
           <div className="member-preview" style={{ backgroundColor: bg, color: fg }}>
             <strong>{values.title.trim() || defaults.title}</strong>
             {previewLocation && <span>{previewLocation}</span>}
+            <span style={{ color: link, textDecoration: "underline" }}>A link</span>
           </div>
-          {ratio < MIN_CONTRAST && (
+          {Math.min(ratio, linkRatio) < MIN_CONTRAST && (
             <p className="warning" role="status">
-              These colors may be hard to read (contrast {ratio.toFixed(1)}:1; at least {MIN_CONTRAST}:1 is
+              These colors may be hard to read (contrast {Math.min(ratio, linkRatio).toFixed(1)}:1; at least {MIN_CONTRAST}:1 is
               recommended). You can still save them.
             </p>
           )}

@@ -313,3 +313,60 @@ export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void
   }
   await agent.com.atproto.repo.applyWrites({ repo: user.did, writes });
 }
+
+/**
+ * Lists `actor`'s photos straight from their PDS. Record keys start with the
+ * date, so the default order is newest first. With `before`, only photos
+ * older than that record key; with `after`, only newer ones, oldest first.
+ * Records that don't validate are skipped.
+ */
+export async function listPhotos(
+  actor: Actor,
+  opts: { limit: number; before?: string; after?: string },
+): Promise<StoredPhoto[]> {
+  const url = new URL("/xrpc/com.atproto.repo.listRecords", actor.pds);
+  url.searchParams.set("repo", actor.did);
+  url.searchParams.set("collection", PHOTO_COLLECTION);
+  url.searchParams.set("limit", String(opts.limit));
+  // listRecords pages from the cursor: descending by key by default, or
+  // ascending with reverse=true.
+  if (opts.before) url.searchParams.set("cursor", opts.before);
+  if (opts.after) {
+    url.searchParams.set("cursor", opts.after);
+    url.searchParams.set("reverse", "true");
+  }
+  let body: { records?: { uri: string; cid: string; value: unknown }[] };
+  try {
+    const res = await fetchFromPds(url);
+    if (!res.ok) return [];
+    body = await res.json();
+  } catch (err) {
+    console.warn("Couldn't list photos from PDS", { did: actor.did, err });
+    return [];
+  }
+  const { jsonToLex } = await import("@atproto/lexicon");
+  const photos: StoredPhoto[] = [];
+  for (const r of body.records ?? []) {
+    const rkey = r.uri.split("/").pop() ?? "";
+    try {
+      const record = jsonToLex(r.value);
+      assertValidPhotoRecord(rkey, record);
+      photos.push({ uri: r.uri, cid: r.cid, rkey, record });
+    } catch (err) {
+      console.warn("Skipping invalid photo record", { uri: r.uri, err });
+    }
+  }
+  return photos;
+}
+
+/** The photos just older and just newer than `rkey`, for prev/next links. */
+export async function photoNeighbors(
+  actor: Actor,
+  rkey: string,
+): Promise<{ older: StoredPhoto | null; newer: StoredPhoto | null }> {
+  const [older, newer] = await Promise.all([
+    listPhotos(actor, { limit: 1, before: rkey }),
+    listPhotos(actor, { limit: 1, after: rkey }),
+  ]);
+  return { older: older[0] ?? null, newer: newer[0] ?? null };
+}

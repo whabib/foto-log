@@ -40,6 +40,7 @@ export const memberSettings = pgTable("member_settings", {
   locality: text("locality"),
   backgroundColor: text("background_color"),
   textColor: text("text_color"),
+  linkColor: text("link_color"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

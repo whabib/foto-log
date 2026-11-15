@@ -9,14 +9,22 @@ import {
   validateMemberSettings,
 } from "./member-settings";
 
-const blank = { title: "", country: "", region: "", locality: "", backgroundColor: "", textColor: "" };
+const blank = {
+  title: "",
+  country: "",
+  region: "",
+  locality: "",
+  backgroundColor: "",
+  textColor: "",
+  linkColor: "",
+};
 const member = { did: "did:plc:abc", handle: "alice.bsky.social" };
 
 describe("validateMemberSettings", () => {
   it("turns blank fields into defaults (null)", () => {
     expect(validateMemberSettings(blank)).toEqual({
       ok: true,
-      value: { title: null, country: null, region: null, locality: null, backgroundColor: null, textColor: null },
+      value: { title: null, country: null, region: null, locality: null, backgroundColor: null, textColor: null, linkColor: null },
     });
   });
 
@@ -28,6 +36,7 @@ describe("validateMemberSettings", () => {
       locality: " Austin ",
       backgroundColor: "#1A1A1A",
       textColor: "#F5F5F5",
+      linkColor: "#00CCFF",
     });
     expect(r).toEqual({
       ok: true,
@@ -38,6 +47,7 @@ describe("validateMemberSettings", () => {
         locality: "Austin",
         backgroundColor: "#1a1a1a",
         textColor: "#f5f5f5",
+        linkColor: "#00ccff",
       },
     });
   });
@@ -99,6 +109,7 @@ describe("memberPageLook", () => {
       location: null,
       backgroundColor: DEFAULT_BACKGROUND_COLOR,
       textColor: DEFAULT_TEXT_COLOR,
+      linkColor: DEFAULT_TEXT_COLOR,
     });
   });
 
@@ -112,10 +123,33 @@ describe("memberPageLook", () => {
           locality: "Austin",
           backgroundColor: "#000000",
           textColor: "#ffffff",
+          linkColor: null,
         },
         member,
       ),
-    ).toEqual({ title: "Daily", location: "Austin, TX, United States", backgroundColor: "#000000", textColor: "#ffffff" });
+    ).toEqual({
+      title: "Daily",
+      location: "Austin, TX, United States",
+      backgroundColor: "#000000",
+      textColor: "#ffffff",
+      linkColor: "#ffffff",
+    });
+  });
+
+  it("uses the saved link color", () => {
+    const look = memberPageLook(
+      {
+        title: null,
+        country: null,
+        region: null,
+        locality: null,
+        backgroundColor: "#666666",
+        textColor: "#00ccff",
+        linkColor: "#ffffff",
+      },
+      member,
+    );
+    expect(look.linkColor).toBe("#ffffff");
   });
 
   it("falls back to the DID in the default title when there's no verified handle", () => {

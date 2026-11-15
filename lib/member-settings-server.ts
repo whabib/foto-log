@@ -24,6 +24,7 @@ export async function getMemberSettings(did: string): Promise<MemberSettings | n
         locality: row.locality,
         backgroundColor: row.backgroundColor,
         textColor: row.textColor,
+        linkColor: row.linkColor,
       }
     : null;
   cache.set(did, value);
