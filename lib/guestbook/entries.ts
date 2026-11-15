@@ -51,7 +51,13 @@ export function allowRules(who: WhoCanSignChoice): { $type: string }[] | undefin
 }
 
 /** What the AppView says about a thread, before the cap is applied. */
-export type ThreadReplies = { entries: GuestbookEntry[]; gated: boolean; who: WhoCanSign };
+export type ThreadReplies = {
+  entries: GuestbookEntry[];
+  gated: boolean;
+  who: WhoCanSign;
+  /** Replies the owner hid, so entries signed here aren't shown again. */
+  hidden: string[];
+};
 
 /** Labels that mean a post shouldn't be shown at all. */
 const HIDING_LABELS = new Set(["!hide", "!takedown", "!suspend"]);
@@ -68,12 +74,12 @@ const str = (v: unknown) => (typeof v === "string" ? v : null);
 export function parseThreadReplies(body: unknown): ThreadReplies {
   const thread = isObj(body) && isObj(body.thread) ? body.thread : null;
   if (!thread || thread.$type !== "app.bsky.feed.defs#threadViewPost") {
-    return { entries: [], gated: false, who: "everyone" };
+    return { entries: [], gated: false, who: "everyone", hidden: [] };
   }
   // The threadgate view is part of the root post's view.
   const gateView = isObj(thread.post) && isObj(thread.post.threadgate) ? thread.post.threadgate : null;
   const gate = gateView && isObj(gateView.record) ? gateView.record : null;
-  const hidden = new Set(Array.isArray(gate?.hiddenReplies) ? gate.hiddenReplies.filter((u) => typeof u === "string") : []);
+  const hidden = new Set(Array.isArray(gate?.hiddenReplies) ? gate.hiddenReplies.filter((u): u is string => typeof u === "string") : []);
   const who = gate ? whoCanSign(gate.allow) : "everyone";
   const gated = who === "nobody";
 
@@ -106,7 +112,7 @@ export function parseThreadReplies(body: unknown): ThreadReplies {
       createdAt: str(record.createdAt) ?? str(post.indexedAt) ?? "",
     });
   }
-  return { entries: sortEntries(entries), gated, who };
+  return { entries: sortEntries(entries), gated, who, hidden: [...hidden] };
 }
 
 function sortEntries(entries: GuestbookEntry[]): GuestbookEntry[] {
@@ -122,7 +128,7 @@ export function buildGuestbook(
   pending: GuestbookEntry[] = [],
   cap = DEFAULT_GUESTBOOK_CAP,
 ): Guestbook {
-  const seen = new Set(thread.entries.map((e) => e.uri));
+  const seen = new Set([...thread.entries.map((e) => e.uri), ...thread.hidden]);
   const entries = sortEntries([...thread.entries, ...pending.filter((e) => !seen.has(e.uri))]);
   // Replies past the cap may slip in before the threadgate lands; they stay
   // on Bluesky but aren't shown here.
@@ -145,9 +151,14 @@ export function parseGuestbook(body: unknown, cap = DEFAULT_GUESTBOOK_CAP): Gues
  * takes a moment to index the change.
  */
 export function applyGate(thread: ThreadReplies, gate: { allow?: unknown; hiddenReplies?: string[] }): ThreadReplies {
-  const hidden = new Set(gate.hiddenReplies ?? []);
+  const hidden = gate.hiddenReplies ?? [];
   const who = whoCanSign(gate.allow);
-  return { entries: thread.entries.filter((e) => !hidden.has(e.uri)), gated: who === "nobody", who };
+  return {
+    entries: thread.entries.filter((e) => !hidden.includes(e.uri)),
+    gated: who === "nobody",
+    who,
+    hidden,
+  };
 }
 
 /** An empty guestbook, for photos whose post can't be read. */

@@ -86,10 +86,10 @@ export default function Guestbook({
         </p>
       )}
       {isOwner && !full && <WhoCanSignForm ownerDid={ownerDid} rkey={rkey} who={guestbook.who} />}
-      {closed && !isOwner ? (
-        <p className="rail-empty">{full ? "This guestbook is full." : "This guestbook is closed."}</p>
-      ) : closed ? (
-        <p className="rail-empty">{full ? "This guestbook is full." : "Nobody else can sign this guestbook."}</p>
+      {full ? (
+        <p className="rail-empty">This guestbook is full.</p>
+      ) : closed && !isOwner ? (
+        <p className="rail-empty">This guestbook is closed.</p>
       ) : signBlocked ? (
         <p className="rail-empty">
           {signBlocked}

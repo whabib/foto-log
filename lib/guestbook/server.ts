@@ -60,7 +60,7 @@ async function fetchThread(postUri: string): Promise<ThreadReplies | null> {
 export async function getGuestbook(
   ownerDid: string,
   postUri: string,
-  opts: { fresh?: boolean } = {},
+  opts: { fresh?: boolean; strict?: boolean } = {},
 ): Promise<Guestbook> {
   const target = parsePostUri(postUri);
   // A photo record could point at anyone's post; only the owner's own count.
@@ -68,7 +68,11 @@ export async function getGuestbook(
   let thread = opts.fresh ? undefined : threads.get(postUri)?.value;
   if (!thread) {
     const fetched = await fetchThread(postUri);
-    if (!fetched) return EMPTY_GUESTBOOK;
+    if (!fetched) {
+      // Signing must know the reply rules; showing the page can do without.
+      if (opts.strict) throw new GuestbookError("unavailable", "We couldn't check this guestbook. Please try again.");
+      return EMPTY_GUESTBOOK;
+    }
     thread = fetched;
     threads.set(postUri, thread);
   }
@@ -83,7 +87,7 @@ export async function getGuestbook(
 
 export class GuestbookError extends Error {
   constructor(
-    readonly code: "invalid" | "closed" | "not_allowed" | "forbidden" | "session_expired",
+    readonly code: "invalid" | "closed" | "not_allowed" | "forbidden" | "unavailable" | "session_expired",
     message: string,
   ) {
     super(message);
@@ -114,11 +118,14 @@ export async function signGuestbook(
   // Only ever reply to, and gate, a post in the photo owner's own repository.
   if (!target || target.did !== ownerDid) throw new GuestbookError("invalid", "That photo can't be found.");
 
-  const before = await getGuestbook(ownerDid, post.uri, { fresh: true });
-  if (before.gated) throw new GuestbookError("closed", "This guestbook is closed.");
-  if (before.closed) throw new GuestbookError("closed", "This guestbook is full.");
-  if (!(await mayReply(before, ownerDid, user.did))) {
-    throw new GuestbookError("not_allowed", notAllowedMessage(before));
+  const before = await getGuestbook(ownerDid, post.uri, { fresh: true, strict: true });
+  if (before.count >= DEFAULT_GUESTBOOK_CAP) throw new GuestbookError("closed", "This guestbook is full.");
+  // The owner can always sign their own guestbook below the cap.
+  if (user.did !== ownerDid) {
+    if (before.gated) throw new GuestbookError("closed", "This guestbook is closed.");
+    if (!(await mayReply(before, ownerDid, user.did))) {
+      throw new GuestbookError("not_allowed", notAllowedMessage(before));
+    }
   }
 
   let agent;
@@ -192,41 +199,55 @@ async function updateGate(
   change: (gate: GateRecord) => GateRecord,
 ): Promise<void> {
   const agent = await agentFor(target.did);
-  let current: GateRecord = {};
-  try {
-    const { data } = await agent.com.atproto.repo.getRecord({
-      repo: target.did,
-      collection: THREADGATE_COLLECTION,
-      rkey: target.rkey,
-    });
-    const value = data.value as { allow?: unknown; hiddenReplies?: unknown };
-    current = {
-      allow: value.allow,
-      hiddenReplies: Array.isArray(value.hiddenReplies)
-        ? value.hiddenReplies.filter((u): u is string => typeof u === "string")
-        : undefined,
-    };
-  } catch (err) {
-    // Only a missing gate is safe to write over; anything else could lose
-    // the owner's hidden replies or reply rules.
-    if (errorName(err) !== "RecordNotFound") throw err;
-  }
-  const next = change(current);
   const postUri = `at://${target.did}/${POST_COLLECTION}/${target.rkey}`;
-  await agent.com.atproto.repo.putRecord({
-    repo: target.did,
-    collection: THREADGATE_COLLECTION,
-    rkey: target.rkey,
-    record: {
-      $type: THREADGATE_COLLECTION,
-      post: postUri,
-      ...(next.allow !== undefined ? { allow: next.allow } : {}),
-      ...(next.hiddenReplies?.length ? { hiddenReplies: next.hiddenReplies } : {}),
-      createdAt: new Date().toISOString(),
-    },
-  });
-  // Show the change on the next view rather than waiting for the AppView.
-  gates.set(postUri, next);
+  // Another change (a second Hide, an automatic close) may land between our
+  // read and write; swapRecord makes that write fail, and we start over.
+  for (let attempt = 1; ; attempt++) {
+    let current: GateRecord = {};
+    let cid: string | null = null;
+    try {
+      const { data } = await agent.com.atproto.repo.getRecord({
+        repo: target.did,
+        collection: THREADGATE_COLLECTION,
+        rkey: target.rkey,
+      });
+      const value = data.value as { allow?: unknown; hiddenReplies?: unknown };
+      cid = data.cid ?? null;
+      current = {
+        allow: value.allow,
+        hiddenReplies: Array.isArray(value.hiddenReplies)
+          ? value.hiddenReplies.filter((u): u is string => typeof u === "string")
+          : undefined,
+      };
+    } catch (err) {
+      // Only a missing gate is safe to write over; anything else could lose
+      // the owner's hidden replies or reply rules.
+      if (errorName(err) !== "RecordNotFound") throw err;
+    }
+    const next = change(current);
+    try {
+      await agent.com.atproto.repo.putRecord({
+        repo: target.did,
+        collection: THREADGATE_COLLECTION,
+        rkey: target.rkey,
+        // null: the gate must still not exist.
+        swapRecord: cid,
+        record: {
+          $type: THREADGATE_COLLECTION,
+          post: postUri,
+          ...(next.allow !== undefined ? { allow: next.allow } : {}),
+          ...(next.hiddenReplies?.length ? { hiddenReplies: next.hiddenReplies } : {}),
+          createdAt: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      if (errorName(err) === "InvalidSwap" && attempt < 3) continue;
+      throw err;
+    }
+    // Show the change on the next view rather than waiting for the AppView.
+    gates.set(postUri, next);
+    return;
+  }
 }
 
 /** Writes a threadgate on the owner's post that allows no more replies. */

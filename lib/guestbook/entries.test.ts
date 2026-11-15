@@ -150,3 +150,17 @@ describe("applyGate", () => {
     expect(buildGuestbook(g).closed).toBe(false);
   });
 });
+
+describe("hidden entries signed here", () => {
+  it("aren't added back from the pending list", () => {
+    const signed = parseThreadReplies(thread([reply(1, "2026-01-01T00:00:00Z")])).entries[0];
+    const fromAppView = parseThreadReplies(
+      thread([], { record: { hiddenReplies: ["at://did:plc:u1/app.bsky.feed.post/r1"] } }),
+    );
+    expect(buildGuestbook(fromAppView, [signed]).entries).toEqual([]);
+    const justHidden = applyGate(parseThreadReplies(thread([])), {
+      hiddenReplies: ["at://did:plc:u1/app.bsky.feed.post/r1"],
+    });
+    expect(buildGuestbook(justHidden, [signed]).count).toBe(0);
+  });
+});
