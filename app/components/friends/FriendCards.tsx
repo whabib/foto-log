@@ -17,7 +17,7 @@ export function FriendCardList({ cards, now, isOwner }: { cards: FriendCard[]; n
         const name = c.handle ?? c.did;
         return (
           <li key={c.did}>
-            <Link href={c.path} className="friend-photo">
+            <Link href={c.path} className="friend-photo" aria-label={`${name}'s newest photo`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={c.thumbnail} alt={c.alt} loading="lazy" />
             </Link>

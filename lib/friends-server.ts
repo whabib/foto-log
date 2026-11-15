@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import type { CurrentUser } from "@/lib/auth";
-import { getDb } from "@/lib/db";
+import { getDb, withLock } from "@/lib/db";
 import { member } from "@/lib/db/schema";
 import {
   FRIEND_CARDS,
@@ -26,6 +26,8 @@ const LOOKUP_CONCURRENCY = 12;
 
 // A member's own changes clear their entry.
 const listCache = new TtlCache<string, string[]>(60_000, 5000);
+// Whether one member is on another's list, keyed "viewer subject".
+const onListCache = new TtlCache<string, boolean>(60_000, 10_000);
 // Each friend's newest photo, shared by every list they're on.
 const cardCache = new TtlCache<string, FriendCard | null>(5 * 60_000, 10_000);
 
@@ -71,10 +73,40 @@ export async function listFriends(actor: Actor, opts: { fresh?: boolean } = {}):
   return friends;
 }
 
-/** Whether `did` is on `viewerDid`'s list. False if the list can't be read. */
+/**
+ * Whether `did` is on `viewerDid`'s list. Reads that one record, so it's
+ * right however long the list is. False if it can't be read.
+ */
 export async function isOnList(viewerDid: string, did: string): Promise<boolean> {
-  const viewer = await resolveActor(viewerDid);
-  return viewer ? (await listFriends(viewer)).includes(did) : false;
+  const key = `${viewerDid} ${did}`;
+  const hit = onListCache.get(key);
+  if (hit) return hit.value;
+  const rkey = friendRecordKey(did);
+  const viewer = rkey ? await resolveActor(viewerDid) : null;
+  if (!rkey || !viewer) return false;
+  const url = new URL("/xrpc/com.atproto.repo.getRecord", viewer.pds);
+  url.searchParams.set("repo", viewer.did);
+  url.searchParams.set("collection", FRIEND_COLLECTION);
+  url.searchParams.set("rkey", rkey);
+  let onList: boolean;
+  try {
+    const res = await fetchFromPds(url);
+    if (res.ok) {
+      const body = (await res.json()) as { value: unknown };
+      const { jsonToLex } = await import("@atproto/lexicon");
+      onList = friendFromRecord(rkey, jsonToLex(body.value)) === did;
+    } else if (res.status === 400) {
+      onList = false; // RecordNotFound
+    } else {
+      console.warn("Couldn't read friend record", { viewer: viewerDid, did, status: res.status });
+      return false;
+    }
+  } catch (err) {
+    console.warn("Couldn't read friend record", { viewer: viewerDid, did, err });
+    return false;
+  }
+  onListCache.set(key, onList);
+  return onList;
 }
 
 /** The friend's newest photo as a right-column card, or null if they have none. */
@@ -140,7 +172,7 @@ function checkFriend(user: CurrentUser, did: string): string {
   return rkey;
 }
 
-async function writeList(user: CurrentUser, write: () => Promise<void>): Promise<void> {
+async function writeList(user: CurrentUser, did: string, write: () => Promise<void>): Promise<void> {
   try {
     await write();
   } catch (err) {
@@ -154,6 +186,7 @@ async function writeList(user: CurrentUser, write: () => Promise<void>): Promise
     throw err;
   } finally {
     listCache.delete(user.did);
+    onListCache.delete(`${user.did} ${did}`);
   }
 }
 
@@ -161,7 +194,7 @@ async function writeList(user: CurrentUser, write: () => Promise<void>): Promise
 export async function addFriend(user: CurrentUser, did: string): Promise<void> {
   const rkey = checkFriend(user, did);
   const agent = await agentFor(user.did);
-  await writeList(user, async () => {
+  await writeList(user, did, async () => {
     try {
       // swapRecord: null only writes if the record doesn't exist yet.
       await agent.com.atproto.repo.putRecord({
@@ -181,7 +214,7 @@ export async function addFriend(user: CurrentUser, did: string): Promise<void> {
 export async function removeFriend(user: CurrentUser, did: string): Promise<void> {
   const rkey = checkFriend(user, did);
   const agent = await agentFor(user.did);
-  await writeList(user, async () => {
+  await writeList(user, did, async () => {
     await agent.com.atproto.repo.deleteRecord({ repo: user.did, collection: FRIEND_COLLECTION, rkey });
   });
 }
@@ -193,20 +226,20 @@ export async function removeFriend(user: CurrentUser, did: string): Promise<void
  */
 export async function welcomeNewMember(user: CurrentUser): Promise<void> {
   try {
-    const db = await getDb();
-    const [known] = await db
-      .select({ did: member.did })
-      .from(member)
-      .where(eq(member.did, user.did))
-      .limit(1);
-    if (known) return;
-    const starter = await resolveActor(STARTER_FRIEND);
-    if (!starter) {
-      console.warn("Couldn't resolve the starter friend", { handle: STARTER_FRIEND });
-      return;
-    }
-    if (starter.did !== user.did) await addFriend(user, starter.did);
-    await db.insert(member).values({ did: user.did }).onConflictDoNothing();
+    // One sign-in at a time per member, across servers, so an overlapping
+    // first sign-in can't add @foto-log.com again after it's been removed.
+    await withLock(`welcome:${user.did}`, async () => {
+      const db = await getDb();
+      const [known] = await db.select({ did: member.did }).from(member).where(eq(member.did, user.did)).limit(1);
+      if (known) return;
+      const starter = await resolveActor(STARTER_FRIEND);
+      if (!starter) {
+        console.warn("Couldn't resolve the starter friend", { handle: STARTER_FRIEND });
+        return; // tried again next sign-in
+      }
+      if (starter.did !== user.did) await addFriend(user, starter.did);
+      await db.insert(member).values({ did: user.did }).onConflictDoNothing();
+    });
   } catch (err) {
     console.error("Couldn't welcome new member", { did: user.did, err });
   }
