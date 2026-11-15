@@ -6,8 +6,9 @@ export default async function Header() {
   const user = await getCurrentUser();
   return (
     <header className="site-header">
-      <Link href="/" className="brand">
-        foto-log
+      <Link href="/" className="brand" aria-label="foto-log home">
+        {/* The logo is an alpha mask filled with the text color, so it follows each member's colors. */}
+        <span className="brand-logo" aria-hidden="true" />
       </Link>
       {user ? (
         <form action={signOut} className="account">

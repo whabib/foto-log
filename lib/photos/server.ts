@@ -313,3 +313,71 @@ export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void
   }
   await agent.com.atproto.repo.applyWrites({ repo: user.did, writes });
 }
+
+/** Most listRecords pages to read for one listPhotos call, in case many records are invalid. */
+const MAX_LIST_PAGES = 5;
+
+/**
+ * Lists `actor`'s photos straight from their PDS. Record keys start with the
+ * date, so the default order is newest first. With `before`, only photos
+ * older than that record key; with `after`, only newer ones, oldest first.
+ * Records that don't validate are skipped, and further pages are read until
+ * `limit` valid photos are found or the collection runs out.
+ */
+export async function listPhotos(
+  actor: Actor,
+  opts: { limit: number; before?: string; after?: string },
+): Promise<StoredPhoto[]> {
+  const { jsonToLex } = await import("@atproto/lexicon");
+  const photos: StoredPhoto[] = [];
+  // listRecords pages from the cursor: descending by key by default, or
+  // ascending with reverse=true.
+  let cursor = opts.after ?? opts.before;
+  for (let page = 0; page < MAX_LIST_PAGES && photos.length < opts.limit; page++) {
+    const url = new URL("/xrpc/com.atproto.repo.listRecords", actor.pds);
+    url.searchParams.set("repo", actor.did);
+    url.searchParams.set("collection", PHOTO_COLLECTION);
+    url.searchParams.set("limit", String(opts.limit - photos.length));
+    if (cursor) url.searchParams.set("cursor", cursor);
+    if (opts.after) url.searchParams.set("reverse", "true");
+    let body: { cursor?: string; records?: { uri: string; cid: string; value: unknown }[] };
+    try {
+      const res = await fetchFromPds(url);
+      if (!res.ok) break;
+      body = await res.json();
+    } catch (err) {
+      console.warn("Couldn't list photos from PDS", { did: actor.did, err });
+      break;
+    }
+    const records = body.records ?? [];
+    for (const r of records) {
+      const rkey = r.uri.split("/").pop() ?? "";
+      try {
+        const record = jsonToLex(r.value);
+        assertValidPhotoRecord(rkey, record);
+        photos.push({ uri: r.uri, cid: r.cid, rkey, record });
+      } catch (err) {
+        console.warn("Skipping invalid photo record", { uri: r.uri, err });
+      }
+    }
+    if (records.length === 0 || !body.cursor || body.cursor === cursor) break;
+    cursor = body.cursor;
+  }
+  return photos;
+}
+
+/**
+ * Up to `count` photos on each side of `rkey`: `older` newest first,
+ * `newer` oldest first. The first of each is the prev/next photo.
+ */
+export async function photoNeighbors(
+  actor: Actor,
+  rkey: string,
+  count = 1,
+): Promise<{ older: StoredPhoto[]; newer: StoredPhoto[] }> {
+  const [older, newer] = await Promise.all([
+    listPhotos(actor, { limit: count, before: rkey }),
+    listPhotos(actor, { limit: count, after: rkey }),
+  ]);
+  return { older, newer };
+}

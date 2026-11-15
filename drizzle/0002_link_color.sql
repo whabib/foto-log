@@ -1,0 +1,1 @@
+ALTER TABLE "member_settings" ADD COLUMN "link_color" text;

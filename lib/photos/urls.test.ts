@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blueskyPostUrl, imageUrl, parseActorParam, photoPath } from "./urls";
+import { blueskyPostUrl, imageUrl, memberPath, parseActorParam, photoPath, thumbnailUrl } from "./urls";
 
 describe("photoPath", () => {
   it("uses @handle when there is one, otherwise the DID", () => {
@@ -35,5 +35,13 @@ describe("other URLs", () => {
       "https://bsky.app/profile/did:plc:abc/post/3l3qo2vutsw2b",
     );
     expect(blueskyPostUrl("at://did:plc:abc/app.bsky.feed.like/3l3")).toBeNull();
+  });
+});
+
+describe("memberPath and thumbnailUrl", () => {
+  it("builds member page paths and CDN thumbnail URLs", () => {
+    expect(memberPath({ did: "did:plc:abc", handle: "alice.bsky.social" })).toBe("/@alice.bsky.social");
+    expect(memberPath({ did: "did:plc:abc", handle: null })).toBe("/did:plc:abc");
+    expect(thumbnailUrl("did:plc:abc", "bafy")).toBe("https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:abc/bafy@jpeg");
   });
 });

@@ -11,7 +11,7 @@ export type SaveState =
   | { status: "saved" }
   | { status: "error"; errors: Partial<Record<SettingsField, string>>; message?: string };
 
-const FIELDS: SettingsField[] = ["title", "country", "region", "locality", "backgroundColor", "textColor"];
+const FIELDS: SettingsField[] = ["title", "country", "region", "locality", "backgroundColor", "textColor", "linkColor"];
 
 /** Saves the signed-in member's own settings. */
 export async function saveSettings(_prev: SaveState, form: FormData): Promise<SaveState> {

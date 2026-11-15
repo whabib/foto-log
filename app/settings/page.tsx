@@ -41,6 +41,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             locality: s.locality ?? "",
             backgroundColor: s.backgroundColor ?? "",
             textColor: s.textColor ?? "",
+            linkColor: s.linkColor ?? "",
           }}
           defaults={{
             title: defaultTitle(identity),
