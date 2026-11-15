@@ -14,10 +14,11 @@ export default function WallpaperField({
   background: string;
 }) {
   const [chosen, setChosen] = useState(mode);
-  const modeSender = useImageSender("wallpaper");
+  // One sender for uploads and mode changes, so they can't overlap.
+  const sender = useImageSender("wallpaper");
 
   const controls = (
-    <fieldset className="wallpaper-mode" disabled={modeSender.status.kind === "busy"}>
+    <fieldset className="wallpaper-mode" disabled={sender.status.kind === "busy"}>
       <legend className="sr-only">How the wallpaper fills the page</legend>
       {(["tile", "fill"] as const).map((m) => (
         <label key={m}>
@@ -30,13 +31,12 @@ export default function WallpaperField({
               const before = chosen;
               setChosen(m);
               // With a saved wallpaper, switching applies right away.
-              if (current && !(await modeSender.send({ wallpaperMode: m }))) setChosen(before);
+              if (current && !(await sender.send({ wallpaperMode: m }))) setChosen(before);
             }}
           />
           {m === "tile" ? "Tile (repeat at its own size)" : "Fill (cover the window)"}
         </label>
       ))}
-      {modeSender.status.kind === "error" && <span className="field-error">{modeSender.status.message}</span>}
     </fieldset>
   );
 
@@ -50,6 +50,7 @@ export default function WallpaperField({
       previewClassName={chosen === "fill" ? "wallpaper-preview fill" : "wallpaper-preview"}
       hint="Fills the page around your fotolog. Your page box keeps its background color, so your text stays readable."
       extra={{ request: { wallpaperMode: chosen }, controls }}
+      sender={sender}
       renderPreview={(url) => (
         <div
           className="wallpaper-sample"

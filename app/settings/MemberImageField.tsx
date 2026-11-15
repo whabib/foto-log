@@ -64,6 +64,7 @@ export default function MemberImageField({
   previewClassName,
   extra,
   renderPreview,
+  sender: shared,
 }: {
   field: ProfileImageField;
   label: string;
@@ -78,9 +79,12 @@ export default function MemberImageField({
   extra?: { request: Omit<ImageRequest, "image" | "remove">; controls: ReactNode };
   /** Draws the preview from the image URL; an <img> by default. */
   renderPreview?: (url: string) => ReactNode;
+  /** A sender shared with the extra controls, so they show one busy state and one error. */
+  sender?: ReturnType<typeof useImageSender>;
 }) {
   const [picked, setPicked] = useState<PreparedImage | null>(null);
-  const { status, setStatus, send } = useImageSender(field);
+  const own = useImageSender(field);
+  const { status, setStatus, send } = shared ?? own;
   const id = `${field}-label`;
 
   useEffect(() => () => {
