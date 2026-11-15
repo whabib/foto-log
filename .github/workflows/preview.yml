@@ -5,8 +5,11 @@ name: Preview deploy
 #   deploy   builds the PR's head and deploys it as a tagged revision that
 #            gets no traffic
 #   promote  sends all traffic to that revision, to test it on foto-log.com
-#   restore  sends all traffic back to the latest revision from main
-# The next merge to main also moves traffic back to the latest revision.
+#   restore  sends all traffic back to the revision deploy.yml last deployed
+#            from main (tagged "main")
+# A preview deploy becomes Cloud Run's latest revision, so restore uses the
+# "main" tag rather than "latest". The next merge to main also moves traffic
+# back to main.
 
 on:
   workflow_dispatch:
@@ -42,6 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Look up the PR
+        if: inputs.action != 'restore'
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
@@ -106,12 +110,13 @@ jobs:
             --quiet
           echo "foto-log.com is now serving PR #${{ inputs.pr }} (tag $TAG)." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Send traffic back to the latest revision
+      - name: Send traffic back to main
+        # No PR lookup for restore, so closing a PR can't block a rollback.
         if: inputs.action == 'restore'
         run: |
           gcloud run services update-traffic "$SERVICE" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
-            --to-latest \
+            --to-tags=main=100 \
             --quiet
-          echo "foto-log.com is back on the latest revision." >> "$GITHUB_STEP_SUMMARY"
+          echo "foto-log.com is back on the revision deployed from main." >> "$GITHUB_STEP_SUMMARY"
