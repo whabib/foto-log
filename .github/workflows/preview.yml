@@ -1,0 +1,122 @@
+name: Preview deploy
+
+# Try a PR on the real domain before merging. Run it from the Actions tab
+# (or `gh workflow run preview.yml -f pr=31 -f action=deploy`):
+#   deploy   builds the PR's head and deploys it as a tagged revision that
+#            gets no traffic
+#   promote  sends all traffic to that revision, to test it on foto-log.com
+#   restore  sends all traffic back to the revision deploy.yml last deployed
+#            from main (tagged "main")
+# A preview deploy becomes Cloud Run's latest revision, so restore uses the
+# "main" tag rather than "latest". The next merge to main also moves traffic
+# back to main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number
+        required: true
+        type: number
+      action:
+        description: What to do
+        required: true
+        type: choice
+        options: [deploy, promote, restore]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  id-token: write
+
+env:
+  PROJECT_ID: foto-log-app
+  REGION: us-central1
+  SERVICE: foto-log-web
+  IMAGE: us-central1-docker.pkg.dev/foto-log-app/foto-log/web
+  TAG: pr${{ inputs.pr }}
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Look up the PR
+        if: inputs.action != 'restore'
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+        run: |
+          read -r head_repo sha state < <(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" \
+            --jq '[.head.repo.full_name, .head.sha, .state] | @tsv')
+          # Only branches in this repository: code from forks never gets the
+          # deploy credentials.
+          if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::PR #$PR comes from $head_repo, not this repository."
+            exit 1
+          fi
+          if [ "$state" != "open" ]; then
+            echo "::error::PR #$PR is $state."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v5
+        if: inputs.action == 'deploy'
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/367642066122/locations/global/workloadIdentityPools/github/providers/github
+          service_account: github-deployer@foto-log-app.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and push image
+        if: inputs.action == 'deploy'
+        env:
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE:$SHA" .
+          docker push "$IMAGE:$SHA"
+
+      - name: Deploy with no traffic
+        if: inputs.action == 'deploy'
+        env:
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --image="$IMAGE:$SHA" \
+            --no-traffic \
+            --tag="$TAG" \
+            --quiet
+          echo "Deployed PR #${{ inputs.pr }} ($SHA) as tag $TAG with no traffic." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Send all traffic to the PR revision
+        if: inputs.action == 'promote'
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-tags="$TAG=100" \
+            --quiet
+          echo "foto-log.com is now serving PR #${{ inputs.pr }} (tag $TAG)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Send traffic back to main
+        # No PR lookup for restore, so closing a PR can't block a rollback.
+        if: inputs.action == 'restore'
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-tags=main=100 \
+            --quiet
+          echo "foto-log.com is back on the revision deployed from main." >> "$GITHUB_STEP_SUMMARY"
