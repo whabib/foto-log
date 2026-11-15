@@ -72,11 +72,18 @@ a {
 }
 
 .site-header .brand {
-  white-space: nowrap;
-  font-weight: 700;
-  font-size: 1.125rem;
+  display: flex;
   color: var(--fg);
   text-decoration: none;
+}
+
+.brand-logo {
+  display: block;
+  width: 135px;
+  height: 28px;
+  background-color: currentColor;
+  -webkit-mask: url("/fotolog-logo.png") no-repeat left center / contain;
+  mask: url("/fotolog-logo.png") no-repeat left center / contain;
 }
 
 .site-header .account {
@@ -277,12 +284,38 @@ button.danger {
 .member-title {
   padding: 16px 20px;
   border-bottom: 1px solid var(--m-rule);
+  text-align: center;
 }
 
 .member-title h1 {
   margin: 0;
   font-size: 1.75rem;
   overflow-wrap: anywhere;
+}
+
+/* On member pages the site header takes the member's colors too. */
+body:has(.member-theme) {
+  background-color: var(--m-bg);
+}
+
+body:has(.member-theme) .site-header {
+  background-color: var(--m-bg);
+  color: var(--m-fg);
+  border-bottom-color: color-mix(in srgb, var(--m-fg) 30%, var(--m-bg));
+}
+
+body:has(.member-theme) .site-header .brand {
+  color: var(--m-fg);
+}
+
+body:has(.member-theme) .site-header a,
+body:has(.member-theme) .site-header .link-button {
+  color: var(--m-link);
+}
+
+body:has(.member-theme) .site-header a:hover,
+body:has(.member-theme) .site-header .link-button:hover {
+  color: var(--m-fg);
 }
 
 .member-cols {

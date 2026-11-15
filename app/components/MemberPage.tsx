@@ -5,7 +5,7 @@ import ShareButton from "@/app/components/ShareButton";
 import DeleteButton from "@/app/[actor]/[date]/DeleteButton";
 import { baseUrl } from "@/lib/config";
 import type { Actor } from "@/lib/identity";
-import type { MemberPageLook } from "@/lib/member-settings";
+import { isHexColor, type MemberPageLook } from "@/lib/member-settings";
 import { parsePhotoRecordKey } from "@/lib/photo-record";
 import type { StoredPhoto } from "@/lib/photos/server";
 import { blueskyPostUrl, imageUrl, memberPath, photoPath, thumbnailUrl } from "@/lib/photos/urls";
@@ -58,9 +58,16 @@ export default function MemberPage(props: MemberPageProps) {
     "--m-fg": look.textColor,
     "--m-link": look.linkColor,
   } as CSSProperties;
+  // The site header sits outside this component, so give it the member's
+  // colors through page-level variables. Only plain hex colors get here.
+  const colors = [look.backgroundColor, look.textColor, look.linkColor];
+  const headerStyle = colors.every(isHexColor)
+    ? `:root{--m-bg:${colors[0]};--m-fg:${colors[1]};--m-link:${colors[2]}}`
+    : "";
 
   return (
     <div className="member-theme" style={theme}>
+      {headerStyle && <style>{headerStyle}</style>}
       <div className="member-box">
         <header className="member-title">
           <h1>{look.title}</h1>
