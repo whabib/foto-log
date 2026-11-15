@@ -1055,3 +1055,7 @@ body:has(.member-theme) .account-menu li button:hover {
 .image-setting .hint {
   margin: 0;
 }
+
+.inline-form {
+  display: inline;
+}

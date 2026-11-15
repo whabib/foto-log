@@ -41,6 +41,10 @@ export async function POST(request: Request) {
   const field = form.get("field");
   if (!isField(field)) return Response.json({ error: "Unknown image." }, { status: 400 });
   const image = form.get("image");
+  // No image part means "remove"; anything else that isn't a file is a bad upload.
+  if (image !== null && !(image instanceof Blob)) {
+    return Response.json({ error: "Invalid upload." }, { status: 400 });
+  }
   const mode = form.get("wallpaperMode");
 
   try {

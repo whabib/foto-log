@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { reauthorize } from "@/app/login/actions";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { type PreparedImage, prepareImage } from "@/lib/client/prepare-image";
@@ -83,7 +83,17 @@ export default function TitleImageForm({
       <div className="image-setting-row">
         <label className="file-button">
           {current || picked ? "Choose another image" : "Choose an image"}
-          <input type="file" accept="image/*" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
+          <input
+            type="file"
+            accept="image/*"
+            disabled={busy}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              // Clear it, so choosing the same file again still fires.
+              e.target.value = "";
+              onFile(file);
+            }}
+          />
         </label>
         {picked && (
           <button type="button" className="primary" disabled={busy} onClick={() => send(picked)}>
@@ -106,9 +116,16 @@ export default function TitleImageForm({
         to 150px tall and saved in your own Bluesky account.
       </p>
       {status.kind === "error" && (
-        <p className="field-error" role="alert">
-          {status.message} {status.signIn && <Link href="/login">Sign in</Link>}
-        </p>
+        <div className="field-error" role="alert">
+          {status.message}{" "}
+          {status.signIn && (
+            <form action={reauthorize} className="inline-form">
+              <button type="submit" className="link-button">
+                Sign in again
+              </button>
+            </form>
+          )}
+        </div>
       )}
     </div>
   );
