@@ -63,17 +63,20 @@ function isScopeError(err: unknown): boolean {
   return e?.status === 403 || /scope/i.test(String(e?.error ?? "") + String(e?.message ?? ""));
 }
 
+/** One image to change: set it to `upload`, or clear it when `upload` is null. */
+export type ImageChange = { field: ProfileImageField; upload: ImageUpload | null };
+
 /**
- * Changes one image on the member's com.foto-log.profile record: uploads
- * `upload` and points the field at it, or clears the field when `upload`
- * is null. Other fields are kept. Retries if another change lands first.
+ * Changes the member's com.foto-log.profile record: uploads an image and
+ * points its field at it, or clears the field, and/or sets the wallpaper
+ * mode. Other fields are kept. Retries if another change lands first.
  */
 export async function setMemberImage(
   user: CurrentUser,
-  field: ProfileImageField,
-  upload: ImageUpload | null,
+  change: ImageChange | null,
   extra: { wallpaperMode?: "tile" | "fill" } = {},
 ): Promise<void> {
+  const upload = change?.upload ?? null;
   if (upload) {
     if (!ACCEPTED_TYPES.has(upload.mimeType)) {
       throw new PhotoError("invalid", "Please choose a JPEG, PNG or WebP image.");
@@ -109,10 +112,10 @@ export async function setMemberImage(
         if (errorName(err) !== "RecordNotFound") throw err;
       }
       const next: Record<string, unknown> = { ...current, $type: PROFILE_COLLECTION };
-      if (blob && upload) {
-        next[field] = { image: blob, aspectRatio: { width: upload.width, height: upload.height } };
-      } else {
-        delete next[field];
+      if (change && blob && upload) {
+        next[change.field] = { image: blob, aspectRatio: { width: upload.width, height: upload.height } };
+      } else if (change) {
+        delete next[change.field];
       }
       if (extra.wallpaperMode) next.wallpaperMode = extra.wallpaperMode;
       next.updatedAt = new Date().toISOString();

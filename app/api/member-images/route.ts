@@ -20,8 +20,10 @@ function isField(v: unknown): v is ProfileImageField {
 }
 
 /**
- * Sets (multipart body with `field`, `image`, `width`, `height`) or clears
- * (`field` and no `image`) one of the signed-in member's page images.
+ * Changes the signed-in member's page images. Multipart body:
+ * - `field`, `image`, `width`, `height` sets an image;
+ * - `field` and `remove=1` clears it;
+ * - `wallpaperMode` (`tile` or `fill`) sets the wallpaper mode, alone or with either.
  */
 export async function POST(request: Request) {
   // The session cookie is SameSite=Lax, but check the origin too.
@@ -39,27 +41,39 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid upload." }, { status: 400 });
   }
   const field = form.get("field");
-  if (!isField(field)) return Response.json({ error: "Unknown image." }, { status: 400 });
   const image = form.get("image");
-  // No image part means "remove"; anything else that isn't a file is a bad upload.
+  const remove = form.get("remove") === "1";
+  const mode = form.get("wallpaperMode");
+  const wallpaperMode = mode === "tile" || mode === "fill" ? mode : undefined;
+  if (field !== null && !isField(field)) return Response.json({ error: "Unknown image." }, { status: 400 });
   if (image !== null && !(image instanceof Blob)) {
     return Response.json({ error: "Invalid upload." }, { status: 400 });
   }
-  const mode = form.get("wallpaperMode");
+  if (mode !== null && !wallpaperMode) return Response.json({ error: "Unknown wallpaper mode." }, { status: 400 });
+  // Exactly one of: an image to set, a removal, or only a mode change.
+  const hasImage = image instanceof Blob;
+  if (field ? hasImage === remove : hasImage || remove || !wallpaperMode) {
+    return Response.json({ error: "Invalid request." }, { status: 400 });
+  }
 
   try {
     await setMemberImage(
       user,
-      field,
-      image instanceof Blob
+      field
         ? {
-            bytes: new Uint8Array(await image.arrayBuffer()),
-            mimeType: image.type,
-            width: Number(form.get("width")),
-            height: Number(form.get("height")),
+            field,
+            upload:
+              image instanceof Blob
+                ? {
+                    bytes: new Uint8Array(await image.arrayBuffer()),
+                    mimeType: image.type,
+                    width: Number(form.get("width")),
+                    height: Number(form.get("height")),
+                  }
+                : null,
           }
         : null,
-      mode === "tile" || mode === "fill" ? { wallpaperMode: mode } : {},
+      { wallpaperMode },
     );
   } catch (err) {
     if (err instanceof PhotoError) {

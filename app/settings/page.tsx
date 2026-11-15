@@ -55,7 +55,15 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           }}
           countries={countryOptions()}
           hasSaved={saved !== null}
-          titleImage={images ? (images.titleImage ? memberImageUrl(user.did, images.titleImage.cid) : null) : undefined}
+          images={
+            images
+              ? {
+                  titleImage: images.titleImage ? memberImageUrl(user.did, images.titleImage.cid) : null,
+                  wallpaper: images.wallpaper ? memberImageUrl(user.did, images.wallpaper.cid) : null,
+                  wallpaperMode: images.wallpaperMode,
+                }
+              : undefined
+          }
         />
       </section>
     </main>
