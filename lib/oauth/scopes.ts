@@ -9,6 +9,7 @@
 export const GRANULAR_SCOPE = [
   "atproto",
   "repo:com.foto-log.photo",
+  "repo:com.foto-log.profile",
   "repo:app.bsky.feed.post",
   "repo:app.bsky.feed.threadgate",
   "blob:image/*",

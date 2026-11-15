@@ -5,6 +5,7 @@ import { blueskyAvatar } from "@/lib/bsky-profile";
 import { getGuestbook, mayReply, notAllowedMessage } from "@/lib/guestbook/server";
 import { resolveActor } from "@/lib/identity";
 import { memberPageLook } from "@/lib/member-settings";
+import { getMemberImages } from "@/lib/member-profile-server";
 import { getMemberSettings } from "@/lib/member-settings-server";
 import { isValidDateKey, photoRecordKey } from "@/lib/photo-record";
 import { railWindow } from "@/lib/photos/rail";
@@ -26,13 +27,14 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
   const owner = await resolveActor(id);
   if (!owner) return null;
 
-  const [recent, dayPhoto, settings, avatar, user] = await Promise.all([
+  const [recent, dayPhoto, settings, avatar, user, images] = await Promise.all([
     listPhotos(owner, { limit: RECENT_PHOTOS }),
     // One photo a day for now, so the day's photo is always -01.
     date ? fetchPhoto(owner, photoRecordKey(date, 1)) : Promise.resolve(null),
     getMemberSettings(owner.did),
     blueskyAvatar(owner.did),
     getCurrentUser(),
+    getMemberImages(owner),
   ]);
   if (date && !dayPhoto) return null;
   const photo = date ? dayPhoto : (recent[0] ?? null);
@@ -63,6 +65,7 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     owner,
     guestbook,
     look: memberPageLook(settings, owner),
+    images,
     avatar,
     photo,
     recent: rail,

@@ -17,6 +17,7 @@ import * as ComAtprotoRepoListRecords from './types/com/atproto/repo/listRecords
 import * as ComAtprotoRepoPutRecord from './types/com/atproto/repo/putRecord'
 import * as ComAtprotoRepoStrongRef from './types/com/atproto/repo/strongRef'
 import * as ComFotoLogPhoto from './types/com/foto-log/photo'
+import * as ComFotoLogProfile from './types/com/foto-log/profile'
 
 export * as ComAtprotoRepoCreateRecord from './types/com/atproto/repo/createRecord'
 export * as ComAtprotoRepoDefs from './types/com/atproto/repo/defs'
@@ -26,6 +27,7 @@ export * as ComAtprotoRepoListRecords from './types/com/atproto/repo/listRecords
 export * as ComAtprotoRepoPutRecord from './types/com/atproto/repo/putRecord'
 export * as ComAtprotoRepoStrongRef from './types/com/atproto/repo/strongRef'
 export * as ComFotoLogPhoto from './types/com/foto-log/photo'
+export * as ComFotoLogProfile from './types/com/foto-log/profile'
 
 export class AtpBaseClient extends XrpcClient {
   com: ComNS
@@ -130,10 +132,12 @@ export class ComAtprotoRepoNS {
 export class ComFotoLogNS {
   _client: XrpcClient
   photo: ComFotoLogPhotoRecord
+  profile: ComFotoLogProfileRecord
 
   constructor(client: XrpcClient) {
     this._client = client
     this.photo = new ComFotoLogPhotoRecord(client)
+    this.profile = new ComFotoLogProfileRecord(client)
   }
 }
 
@@ -211,6 +215,90 @@ export class ComFotoLogPhotoRecord {
       'com.atproto.repo.deleteRecord',
       undefined,
       { collection: 'com.foto-log.photo', ...params },
+      { headers },
+    )
+  }
+}
+
+export class ComFotoLogProfileRecord {
+  _client: XrpcClient
+
+  constructor(client: XrpcClient) {
+    this._client = client
+  }
+
+  async list(
+    params: OmitKey<ComAtprotoRepoListRecords.QueryParams, 'collection'>,
+  ): Promise<{
+    cursor?: string
+    records: { uri: string; value: ComFotoLogProfile.Record }[]
+  }> {
+    const res = await this._client.call('com.atproto.repo.listRecords', {
+      collection: 'com.foto-log.profile',
+      ...params,
+    })
+    return res.data
+  }
+
+  async get(
+    params: OmitKey<ComAtprotoRepoGetRecord.QueryParams, 'collection'>,
+  ): Promise<{ uri: string; cid: string; value: ComFotoLogProfile.Record }> {
+    const res = await this._client.call('com.atproto.repo.getRecord', {
+      collection: 'com.foto-log.profile',
+      ...params,
+    })
+    return res.data
+  }
+
+  async create(
+    params: OmitKey<
+      ComAtprotoRepoCreateRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ComFotoLogProfile.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'com.foto-log.profile'
+    const res = await this._client.call(
+      'com.atproto.repo.createRecord',
+      undefined,
+      {
+        collection,
+        rkey: 'self',
+        ...params,
+        record: { ...record, $type: collection },
+      },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ComFotoLogProfile.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'com.foto-log.profile'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async delete(
+    params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
+    headers?: Record<string, string>,
+  ): Promise<void> {
+    await this._client.call(
+      'com.atproto.repo.deleteRecord',
+      undefined,
+      { collection: 'com.foto-log.profile', ...params },
       { headers },
     )
   }
