@@ -12,11 +12,9 @@ import { useEffect, useRef } from "react";
 export default function AccountMenu({
   label,
   myPage,
-  signOut,
 }: {
   label: string;
   myPage: string;
-  signOut: () => Promise<void>;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const pathname = usePathname();
@@ -68,7 +66,8 @@ export default function AccountMenu({
           <Link href="/settings">Settings</Link>
         </li>
         <li>
-          <form action={signOut}>
+          {/* A plain POST, so it still works on a page opened before a deploy. */}
+          <form method="post" action="/logout">
             <button type="submit">Logout</button>
           </form>
         </li>
