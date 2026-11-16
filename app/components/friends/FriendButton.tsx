@@ -5,14 +5,18 @@ import { useState, useTransition } from "react";
 import { reauthorize } from "@/app/login/actions";
 import { type FriendState, setFriendAction } from "./actions";
 
-/** "Add to Friends/Favorites" or "Remove from Friends/Favorites" under another member's photo. */
-export default function FriendButton({ did, onList }: { did: string; onList: boolean }) {
+/**
+ * "Add to Friends/Favorites" or "Remove from Friends/Favorites" under
+ * another member's photo, or a short "Remove" on a row of the full list.
+ */
+export default function FriendButton({ did, onList, short = false }: { did: string; onList: boolean; short?: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<Extract<FriendState, { status: "error" }> | null>(null);
-  const label = onList ? "Remove from Friends/Favorites" : "Add to Friends/Favorites";
+  const label = short ? (onList ? "Remove" : "Add") : onList ? "Remove from Friends/Favorites" : "Add to Friends/Favorites";
+  const Wrapper = short ? "span" : "p";
   return (
-    <p className="friend-toggle">
+    <Wrapper className={short ? "friend-toggle-short" : "friend-toggle"}>
       <button
         type="button"
         className="link-button"
@@ -42,6 +46,6 @@ export default function FriendButton({ did, onList }: { did: string; onList: boo
           )}
         </span>
       )}
-    </p>
+    </Wrapper>
   );
 }

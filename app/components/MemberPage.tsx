@@ -13,7 +13,15 @@ import { isHexColor, type MemberPageLook } from "@/lib/member-settings";
 import { parsePhotoRecordKey } from "@/lib/photo-record";
 import type { StoredPhoto } from "@/lib/photos/server";
 import type { MemberImages } from "@/lib/member-profile";
-import { blueskyPostUrl, imageUrl, memberImageUrl, memberPath, photoPath, thumbnailUrl } from "@/lib/photos/urls";
+import {
+  blueskyPostUrl,
+  friendsPath,
+  imageUrl,
+  memberImageUrl,
+  memberPath,
+  photoPath,
+  thumbnailUrl,
+} from "@/lib/photos/urls";
 
 /** Formats a YYYY-MM-DD calendar date, e.g. "October 14, 2026". It's a date, not an instant. */
 export function formatDay(date: string) {
@@ -65,48 +73,10 @@ export type MemberPageProps = {
 
 export default function MemberPage(props: MemberPageProps) {
   const { owner, look, avatar, photo, recent, older, newer, isOwner, signedIn, images } = props;
-  const titleImage = images?.titleImage ?? null;
-  const wallpaper = images?.wallpaper ?? null;
   const who = owner.handle ?? owner.did;
-  const theme = {
-    "--m-bg": look.backgroundColor,
-    "--m-fg": look.textColor,
-    "--m-link": look.linkColor,
-    ...(wallpaper && {
-      // The URL is built from a DID and a CID, neither of which can contain quotes.
-      backgroundImage: `url("${memberImageUrl(owner.did, wallpaper.cid)}")`,
-    }),
-  } as CSSProperties;
-  const wallpaperClass = wallpaper ? (images?.wallpaperMode === "fill" ? " wallpaper-fill" : " wallpaper-tile") : "";
-  // The site header sits outside this component, so give it the member's
-  // colors through page-level variables. Only plain hex colors get here.
-  const colors = [look.backgroundColor, look.textColor, look.linkColor];
-  const headerStyle = colors.every(isHexColor)
-    ? `:root{--m-bg:${colors[0]};--m-fg:${colors[1]};--m-link:${colors[2]}}`
-    : "";
 
   return (
-    <div className={`member-theme${wallpaperClass}`} style={theme}>
-      {headerStyle && <style>{headerStyle}</style>}
-      <div className="member-box">
-        <header className={titleImage ? "member-title has-image" : "member-title"}>
-          <h1>
-            {titleImage ? (
-              // The text title is the alt text, so it shows if the image doesn't load.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                className="title-image"
-                src={memberImageUrl(owner.did, titleImage.cid)}
-                alt={look.title}
-                width={titleImage.width ?? undefined}
-                height={titleImage.height ?? undefined}
-              />
-            ) : (
-              look.title
-            )}
-          </h1>
-        </header>
-
+    <MemberFrame owner={owner} look={look} images={images} signedIn={signedIn}>
         <div className="member-cols">
           <main className="member-center">
             {photo ? (
@@ -156,7 +126,9 @@ export default function MemberPage(props: MemberPageProps) {
           </aside>
 
           <aside className="member-right">
-            <h3 className="rail-heading">Friends/Favorites</h3>
+            <h3 className="rail-heading">
+              <Link href={friendsPath(owner)}>Friends/Favorites</Link>
+            </h3>
             {props.friends ?? (
               <Suspense fallback={<p className="rail-empty">Loading friends&rsquo; photos…</p>}>
                 <FriendsColumn owner={owner} isOwner={isOwner} />
@@ -166,6 +138,70 @@ export default function MemberPage(props: MemberPageProps) {
             <p className="rail-empty">Coming soon.</p>
           </aside>
         </div>
+    </MemberFrame>
+  );
+}
+
+/**
+ * A member's colors, wallpaper and title around `children`, for every page
+ * of their fotolog.
+ */
+export function MemberFrame({
+  owner,
+  look,
+  images,
+  signedIn,
+  children,
+}: {
+  owner: Actor;
+  look: MemberPageLook;
+  images?: MemberImages;
+  signedIn: boolean;
+  children: ReactNode;
+}) {
+  const titleImage = images?.titleImage ?? null;
+  const wallpaper = images?.wallpaper ?? null;
+  const theme = {
+    "--m-bg": look.backgroundColor,
+    "--m-fg": look.textColor,
+    "--m-link": look.linkColor,
+    ...(wallpaper && {
+      // The URL is built from a DID and a CID, neither of which can contain quotes.
+      backgroundImage: `url("${memberImageUrl(owner.did, wallpaper.cid)}")`,
+    }),
+  } as CSSProperties;
+  const wallpaperClass = wallpaper ? (images?.wallpaperMode === "fill" ? " wallpaper-fill" : " wallpaper-tile") : "";
+  // The site header sits outside this component, so give it the member's
+  // colors through page-level variables. Only plain hex colors get here.
+  const colors = [look.backgroundColor, look.textColor, look.linkColor];
+  const headerStyle = colors.every(isHexColor)
+    ? `:root{--m-bg:${colors[0]};--m-fg:${colors[1]};--m-link:${colors[2]}}`
+    : "";
+
+  return (
+    <div className={`member-theme${wallpaperClass}`} style={theme}>
+      {headerStyle && <style>{headerStyle}</style>}
+      <div className="member-box">
+        <header className={titleImage ? "member-title has-image" : "member-title"}>
+          <h1>
+            <Link href={memberPath(owner)} className="member-title-link">
+              {titleImage ? (
+                // The text title is the alt text, so it shows if the image doesn't load.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="title-image"
+                  src={memberImageUrl(owner.did, titleImage.cid)}
+                  alt={look.title}
+                  width={titleImage.width ?? undefined}
+                  height={titleImage.height ?? undefined}
+                />
+              ) : (
+                look.title
+              )}
+            </Link>
+          </h1>
+        </header>
+        {children}
       </div>
       {!signedIn && (
         <p className="member-signup">

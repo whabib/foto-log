@@ -3,6 +3,9 @@ import * as Friend from "@/lib/lexicon/types/com/foto-log/friend";
 
 export const FRIEND_COLLECTION = "com.foto-log.friend";
 
+/** The most members a Friends/Favorites list can hold, as the original Fotolog limited it. */
+export const MAX_FRIENDS = 1000;
+
 /** How many friends' photos the member page's right column shows. */
 export const FRIEND_CARDS = 6;
 
@@ -38,6 +41,32 @@ export type FriendCard = {
   alt: string;
   createdAt: string;
 };
+
+/** One row of the full Friends/Favorites page: the friend, and their newest photo if they have one. */
+export type FriendRow = { did: string; handle: string | null; latest: FriendCard | null };
+
+export type FriendSort = "handle" | "recent";
+
+export function parseFriendSort(value: unknown): FriendSort {
+  return value === "recent" ? "recent" : "handle";
+}
+
+/**
+ * Sorts the full list: by handle (members without a verified handle last,
+ * by DID), or by newest photo with friends who have none last, by handle.
+ */
+export function sortFriends(rows: FriendRow[], sort: FriendSort): FriendRow[] {
+  const byName = (a: FriendRow, b: FriendRow) => {
+    if (a.handle && b.handle) return a.handle.localeCompare(b.handle);
+    if (a.handle || b.handle) return a.handle ? -1 : 1;
+    return a.did.localeCompare(b.did);
+  };
+  const time = (r: FriendRow) => {
+    const t = r.latest ? Date.parse(r.latest.createdAt) : NaN;
+    return Number.isNaN(t) ? -Infinity : t;
+  };
+  return [...rows].sort((a, b) => (sort === "recent" ? time(b) - time(a) || byName(a, b) : byName(a, b)));
+}
 
 /** The `count` friends with the newest photos, newest first. Friends without photos are left out. */
 export function newestCards(cards: (FriendCard | null)[], count: number): FriendCard[] {
