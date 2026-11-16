@@ -83,7 +83,8 @@ function NameClaim({ handle, disabled }: { handle: string | null; disabled?: boo
 
   const checked = check?.name === normalized ? check : null;
   const message = error ?? problem ?? checked?.message ?? null;
-  const ok = !error && !problem && checked?.ok === true;
+  // A failed attempt shows its error but can be tried again as is.
+  const ok = !problem && checked?.ok === true;
 
   const claim = () => {
     if (!ok) return;
@@ -137,7 +138,7 @@ function NameClaim({ handle, disabled }: { handle: string | null; disabled?: boo
           {saving ? "Setting…" : "Set name"}
         </button>
       </div>
-      <p id="fotologName-status" className={ok ? "notice-inline" : "field-error"} role="status">
+      <p id="fotologName-status" className={ok && !error ? "notice-inline" : "field-error"} role="status">
         {message}
       </p>
     </div>

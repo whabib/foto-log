@@ -14,19 +14,23 @@ import { displayName } from "@/lib/photos/urls";
 
 type Props = { params: Promise<{ actor: string }>; searchParams: Promise<{ sort?: string | string[] }> };
 
-function loadOwner(actorParam: string) {
-  return resolveMemberPage(actorParam, "/friends");
+/** The page's owner; a redirect to their primary URL keeps the chosen sort. */
+async function loadOwner({ params, searchParams }: Props) {
+  const [{ actor }, query] = await Promise.all([params, searchParams]);
+  const sort = parseFriendSort(query.sort);
+  return resolveMemberPage(actor, sort === "recent" ? "/friends?sort=recent" : "/friends");
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const owner = await loadOwner((await params).actor);
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const owner = await loadOwner(props);
   if (!owner) return { title: "Member not found · foto-log" };
   return { title: `${displayName(owner)}'s Friends/Favorites · foto-log` };
 }
 
 /** Everyone on a member's Friends/Favorites, sorted by handle or by newest photo. */
-export default async function FriendsPage({ params, searchParams }: Props) {
-  const owner = await loadOwner((await params).actor);
+export default async function FriendsPage(props: Props) {
+  const { searchParams } = props;
+  const owner = await loadOwner(props);
   if (!owner) notFound();
   const sort = parseFriendSort((await searchParams).sort);
   const [settings, images, user] = await Promise.all([
