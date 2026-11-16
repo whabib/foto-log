@@ -4,7 +4,7 @@ import * as Friend from "@/lib/lexicon/types/com/foto-log/friend";
 export const FRIEND_COLLECTION = "com.foto-log.friend";
 
 /** The most members a Friends/Favorites list can hold, so a full list can always be read and shown. */
-export const MAX_FRIENDS = 1000;
+export const MAX_FRIENDS = 10_000;
 
 /** How many friends' photos the member page's right column shows. */
 export const FRIEND_CARDS = 6;
