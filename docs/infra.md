@@ -47,8 +47,35 @@ To get a SQL shell, use Cloud SQL Studio in the console. The instance has no pub
 | `cookie-secret` | `COOKIE_SECRET` | 32 random bytes, base64 (signs the session cookie) |
 | `store-encryption-key` | `STORE_ENCRYPTION_KEY` | 32 random bytes, base64 (encrypts OAuth state and sessions in Postgres) |
 | `db-password` | `DB_PASSWORD` | Password for database user `fotolog` |
+| `index-tick-secret` | `INDEX_TICK_SECRET` | 32 random bytes, hex (Cloud Scheduler's bearer token for `/api/index-tick`) |
 
 All were generated directly into Secret Manager and never written to disk. Only the runtime service account can read them. Mounted as `:latest`, so a new version takes effect on the next deploy. See [auth.md](auth.md) for rotation.
+
+## Photo index (Cloud Scheduler)
+
+The home page lists photos from the `photo_index` table. foto-log writes its own posts and deletes to it directly. Everything else arrives from Bluesky's Jetstream: every 5 minutes, Cloud Scheduler job `foto-log-index-tick` POSTs to `https://foto-log.com/api/index-tick` with `Authorization: Bearer <INDEX_TICK_SECRET>`. Each run reads Jetstream from the cursor saved in `app_state` until it catches up (at most 45 seconds), then copies the photos of up to 5 members who haven't been backfilled yet. Overlapping runs skip. An always-on worker is #45.
+
+Cost: Cloud Scheduler's first 3 jobs per billing account are free, and the Cloud Run time is a few seconds every 5 minutes.
+
+Set up once, after the PR that adds the endpoint is merged and deployed (so the service update below builds on the `main` revision):
+
+```sh
+# The shared secret.
+openssl rand -hex 32 | tr -d '\n' | gcloud secrets create index-tick-secret --project=foto-log-app --data-file=-
+gcloud secrets add-iam-policy-binding index-tick-secret --project=foto-log-app \
+  --member=serviceAccount:foto-log-web@foto-log-app.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor
+gcloud run services update foto-log-web --project=foto-log-app --region=us-central1 \
+  --update-secrets=INDEX_TICK_SECRET=index-tick-secret:latest
+
+# The job.
+gcloud services enable cloudscheduler.googleapis.com --project=foto-log-app
+gcloud scheduler jobs create http foto-log-index-tick --project=foto-log-app --location=us-central1 \
+  --schedule="*/5 * * * *" --uri=https://foto-log.com/api/index-tick --http-method=POST \
+  --attempt-deadline=120s \
+  --headers="Authorization=Bearer $(gcloud secrets versions access latest --secret=index-tick-secret --project=foto-log-app)"
+```
+
+Check it with `gcloud scheduler jobs run foto-log-index-tick --project=foto-log-app --location=us-central1` and the `Index tick` lines in the Cloud Run logs. The token is stored in the job's config, so anyone who can view Cloud Scheduler jobs in the project can read it; it only lets them run the indexer.
 
 ## CI/CD
 

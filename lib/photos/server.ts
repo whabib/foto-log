@@ -186,12 +186,13 @@ export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<s
     });
     // createRecord with an explicit key fails if the key exists, so two
     // uploads racing for the same day can't both succeed.
-    await agent.com.atproto.repo.createRecord({
+    const { data: created } = await agent.com.atproto.repo.createRecord({
       repo: user.did,
       collection: PHOTO_COLLECTION,
       rkey,
       record,
     });
+    await updateIndex((index) => index.indexPhoto(user.did, rkey, created.cid, record));
   } catch (err) {
     // The write may have succeeded with the response lost, or failed because
     // another upload took this key. Read back before deleting anything.
@@ -312,6 +313,22 @@ export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void
     });
   }
   await agent.com.atproto.repo.applyWrites({ repo: user.did, writes });
+  await updateIndex((index) => index.unindexPhoto(user.did, rkey));
+}
+
+/**
+ * Applies a change to the photo index. The index catches up from Jetstream
+ * anyway, so a failure here only delays the change; it never fails the
+ * write. Imported lazily: the index module imports this one.
+ */
+async function updateIndex(
+  change: (index: typeof import("@/lib/photo-index-server")) => Promise<void>,
+): Promise<void> {
+  try {
+    await change(await import("@/lib/photo-index-server"));
+  } catch (err) {
+    console.warn("Couldn't update the photo index; Jetstream will catch up", { err });
+  }
 }
 
 /** Most listRecords pages to read for one listPhotos call, in case many records are invalid. */

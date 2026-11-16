@@ -66,3 +66,27 @@ export async function withLock<T>(name: string, fn: () => Promise<T>): Promise<T
     client.release();
   }
 }
+
+/**
+ * Runs `fn` if no other instance holds the advisory lock named `name`;
+ * returns null without running it otherwise. For periodic jobs that should
+ * skip a turn rather than queue up.
+ */
+export async function withTryLock<T>(name: string, fn: () => Promise<T>): Promise<T | null> {
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query<{ ok: boolean }>(
+      "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS ok",
+      [name],
+    );
+    if (!rows[0]?.ok) return null;
+    try {
+      return await fn();
+    } finally {
+      await client.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [name]);
+    }
+  } finally {
+    client.release();
+  }
+}
