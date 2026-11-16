@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { type CSSProperties, type ReactNode, Suspense } from "react";
 import LocalTime from "@/app/components/LocalTime";
-import ShareButton from "@/app/components/ShareButton";
 import FriendButton from "@/app/components/friends/FriendButton";
 import FriendsColumn from "@/app/components/friends/FriendsColumn";
 import Guestbook from "@/app/components/guestbook/Guestbook";
 import { EMPTY_GUESTBOOK, type Guestbook as GuestbookData } from "@/lib/guestbook/entries";
 import DeleteButton from "@/app/[actor]/[date]/DeleteButton";
-import { baseUrl } from "@/lib/config";
 import type { Actor } from "@/lib/identity";
 import { isHexColor, type MemberPageLook } from "@/lib/member-settings";
 import { parsePhotoRecordKey } from "@/lib/photo-record";
@@ -273,8 +271,6 @@ function CenterPhoto({
               </a>
             </>
           )}
-          {" | "}
-          <ShareButton url={`${baseUrl}${permalink}`} title={record.caption ?? formatDay(record.displayDate)} />
         </p>
         {isOwner && <DeleteButton rkey={photo.rkey} />}
       </div>
