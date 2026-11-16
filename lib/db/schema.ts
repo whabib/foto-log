@@ -1,4 +1,4 @@
-import { index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 
 /** In-progress OAuth authorizations. Values are encrypted; rows expire after an hour. */
 export const oauthState = pgTable(
@@ -56,6 +56,10 @@ export const member = pgTable("member", {
   backfilledAt: timestamp("backfilled_at", { withTimezone: true }),
   /** The member's verified handle as last seen, or null if unknown or invalid. */
   handle: text("handle"),
+  /** The member's Fotolog name, lowercase and unique; set once, never released. */
+  fotologName: text("fotolog_name").unique(),
+  /** Whether the Fotolog name, rather than the Bluesky handle, is the member's primary name. */
+  showFotologName: boolean("show_fotolog_name").notNull().default(true),
 });
 
 /**

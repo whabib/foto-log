@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createUserSession, lookupHandle, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
+import { primaryName } from "@/lib/fotolog-name-server";
 import { welcomeNewMember } from "@/lib/friends-server";
 import { backfillOnSignIn, rememberHandle } from "@/lib/photo-index-server";
 import { memberPath } from "@/lib/photos/urls";
@@ -31,7 +32,8 @@ export async function GET(request: NextRequest) {
     await rememberHandle(session.did, handle).catch((err) => console.warn("Couldn't record handle", { err }));
     await backfillOnSignIn(session.did);
     // Members land on their own fotolog.
-    const response = redirectTo(memberPath({ did: session.did, handle }));
+    const name = await primaryName(session.did).catch(() => null);
+    const response = redirectTo(memberPath({ did: session.did, handle, name }));
     response.cookies.set(SESSION_COOKIE, cookie, sessionCookieOptions);
     return response;
   } catch (err) {

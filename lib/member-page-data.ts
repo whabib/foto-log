@@ -2,16 +2,17 @@ import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { blueskyAvatar } from "@/lib/bsky-profile";
+import { primaryNames } from "@/lib/fotolog-name-server";
 import { isMember, isOnList } from "@/lib/friends-server";
+import type { Guestbook } from "@/lib/guestbook/entries";
 import { getGuestbook, mayReply, notAllowedMessage } from "@/lib/guestbook/server";
-import { resolveActor } from "@/lib/identity";
 import { memberPageLook } from "@/lib/member-settings";
+import { resolveMemberPage } from "@/lib/member-resolve-server";
 import { getMemberImages } from "@/lib/member-profile-server";
 import { getMemberSettings } from "@/lib/member-settings-server";
 import { isValidDateKey, photoRecordKey } from "@/lib/photo-record";
 import { railWindow } from "@/lib/photos/rail";
 import { fetchPhoto, listPhotos, photoNeighbors, type StoredPhoto } from "@/lib/photos/server";
-import { parseActorParam } from "@/lib/photos/urls";
 
 export const RECENT_PHOTOS = 6;
 
@@ -22,10 +23,8 @@ export const RECENT_PHOTOS = 6;
  * share one load.
  */
 export const loadMemberPage = cache(async (actorParam: string, date?: string) => {
-  const id = parseActorParam(actorParam);
-  if (!id) return null;
   if (date !== undefined && !isValidDateKey(date)) return null;
-  const owner = await resolveActor(id);
+  const owner = await resolveMemberPage(actorParam, date ? `/${date}` : "");
   if (!owner) return null;
 
   const [recent, dayPhoto, settings, avatar, user, images] = await Promise.all([
@@ -59,7 +58,7 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
   const onList = user && user.did !== owner.did ? isOnList(user.did, owner.did) : null;
   // Only members can be added; anyone else gets an invite instead.
   const ownerIsMember = onList ? isMember(owner.did) : null;
-  const guestbook = photo ? await getGuestbook(owner.did, photo.record.post.uri) : null;
+  const guestbook = photo ? await withAuthorNames(await getGuestbook(owner.did, photo.record.post.uri)) : null;
   // Why the viewer can't sign an open guestbook, if they can't.
   const signBlocked =
     guestbook && user && !guestbook.closed && !(await mayReply(guestbook, owner.did, user.did))
@@ -86,3 +85,19 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     signBlocked,
   };
 });
+
+/** Adds each guestbook author's primary Fotolog name, without touching the cached entries. */
+async function withAuthorNames(guestbook: Guestbook): Promise<Guestbook> {
+  if (guestbook.entries.length === 0) return guestbook;
+  const names = await primaryNames(guestbook.entries.map((e) => e.author.did)).catch((err) => {
+    console.warn("Couldn't load guestbook names", { err });
+    return new Map<string, string>();
+  });
+  if (names.size === 0) return guestbook;
+  return {
+    ...guestbook,
+    entries: guestbook.entries.map((e) =>
+      names.has(e.author.did) ? { ...e, author: { ...e.author, name: names.get(e.author.did) } } : e,
+    ),
+  };
+}

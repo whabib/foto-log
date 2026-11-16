@@ -6,13 +6,14 @@ import FriendsColumn from "@/app/components/friends/FriendsColumn";
 import Guestbook from "@/app/components/guestbook/Guestbook";
 import { EMPTY_GUESTBOOK, type Guestbook as GuestbookData } from "@/lib/guestbook/entries";
 import DeleteButton from "@/app/[actor]/[date]/DeleteButton";
-import type { Actor } from "@/lib/identity";
+import type { Member } from "@/lib/member-resolve-server";
 import { isHexColor, type MemberPageLook } from "@/lib/member-settings";
 import { parsePhotoRecordKey } from "@/lib/photo-record";
 import type { StoredPhoto } from "@/lib/photos/server";
 import type { MemberImages } from "@/lib/member-profile";
 import {
   blueskyPostUrl,
+  displayName,
   friendsPath,
   imageUrl,
   memberImageUrl,
@@ -42,13 +43,13 @@ function formatShortDay(date: string) {
 }
 
 /** The page of a stored photo. One photo a day for now, so that's its upload date's page. */
-export function storedPhotoPath(owner: Actor, photo: StoredPhoto): string {
+export function storedPhotoPath(owner: Member, photo: StoredPhoto): string {
   const key = parsePhotoRecordKey(photo.rkey);
   return photoPath(owner, key?.uploadDate ?? photo.record.uploadDate);
 }
 
 export type MemberPageProps = {
-  owner: Actor;
+  owner: Member;
   look: MemberPageLook;
   avatar: string | null;
   /** The photo in the center, or null if the member has none yet. */
@@ -73,7 +74,7 @@ export type MemberPageProps = {
 
 export default function MemberPage(props: MemberPageProps) {
   const { owner, look, avatar, photo, recent, older, newer, isOwner, signedIn, images } = props;
-  const who = owner.handle ?? owner.did;
+  const who = displayName(owner);
 
   return (
     <MemberFrame owner={owner} look={look} images={images} signedIn={signedIn}>
@@ -155,7 +156,7 @@ export function MemberFrame({
   signedIn,
   children,
 }: {
-  owner: Actor;
+  owner: Member;
   look: MemberPageLook;
   images?: MemberImages;
   signedIn: boolean;

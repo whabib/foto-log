@@ -3,6 +3,7 @@ import { Agent } from "@atproto/api";
 import type { CurrentUser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { resolveActor, type Actor } from "@/lib/identity";
+import { primaryName } from "@/lib/fotolog-name-server";
 import { getOAuthClient } from "@/lib/oauth/client";
 import { fetchFromPds } from "@/lib/safe-fetch";
 import {
@@ -80,7 +81,8 @@ const MAX_CAPTION_BYTES = 3000;
 const MAX_ALT_BYTES = 10_000;
 const utf8Length = (s: string) => new TextEncoder().encode(s).length;
 
-export type Identity = { did: string; handle: string | null };
+/** The signed-in member: their handle, and their Fotolog name when it's their primary name. */
+export type Identity = { did: string; handle: string | null; name: string | null };
 
 /**
  * The user's current verified handle, looked up fresh rather than taken
@@ -88,8 +90,8 @@ export type Identity = { did: string; handle: string | null };
  * to DID-based URLs if it can't be verified.
  */
 export async function currentIdentity(user: CurrentUser): Promise<Identity> {
-  const actor = await resolveActor(user.did);
-  return { did: user.did, handle: actor?.handle ?? null };
+  const [actor, name] = await Promise.all([resolveActor(user.did), primaryName(user.did)]);
+  return { did: user.did, handle: actor?.handle ?? null, name };
 }
 
 /** The page URL for a photo on `uploadDate`. */

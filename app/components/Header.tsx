@@ -18,7 +18,7 @@ export default async function Header() {
       {user && identity ? (
         <div className="account">
           <AccountMenu
-            label={identity.handle ? `@${identity.handle}` : user.did}
+            label={identity.name ?? (identity.handle ? `@${identity.handle}` : user.did)}
             myPage={memberPath(identity)}
           />
         </div>

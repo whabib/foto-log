@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { type FriendRow, type FriendSort, sortFriends, timeAgo } from "@/lib/friends";
-import type { Actor } from "@/lib/identity";
-import { friendsPath, memberPath } from "@/lib/photos/urls";
+import type { Member } from "@/lib/member-resolve-server";
+import { displayName, friendsPath, memberPath } from "@/lib/photos/urls";
 import FriendButton from "./FriendButton";
 
 /** The full Friends/Favorites list: one row per friend, with a Remove link for the owner. */
@@ -12,7 +12,7 @@ export default function FriendsList({
   isOwner,
   now,
 }: {
-  owner: Actor;
+  owner: Member;
   rows: FriendRow[];
   sort: FriendSort;
   isOwner: boolean;
@@ -43,7 +43,7 @@ export default function FriendsList({
       ) : (
         <ul className="friends-list">
           {sortFriends(rows, sort).map((r) => {
-            const name = r.handle ?? r.did;
+            const name = displayName(r);
             const href = memberPath(r);
             return (
               <li key={r.did}>
@@ -66,7 +66,7 @@ export default function FriendsList({
         </ul>
       )}
       <p className="rail-more">
-        » <Link href={memberPath(owner)}>Back to {owner.handle ?? owner.did}&rsquo;s fotolog</Link>
+        » <Link href={memberPath(owner)}>Back to {displayName(owner)}&rsquo;s fotolog</Link>
       </p>
     </main>
   );

@@ -1,11 +1,33 @@
 import { isValidDid, isValidHandle } from "@atproto/syntax";
+import { looksLikeName } from "@/lib/fotolog-name";
 
-/** Path of the page for one day's photo, e.g. /@alice.bsky.social/2026-10-14. */
-export function photoPath(actor: { did: string; handle: string | null }, uploadDate: string): string {
-  return actor.handle ? `/@${actor.handle}/${uploadDate}` : `/${actor.did}/${uploadDate}`;
+/**
+ * Who a link points to: the DID, the Bluesky handle, and the member's
+ * Fotolog name when it's their primary name.
+ */
+export type MemberRef = { did: string; handle: string | null; name?: string | null };
+
+/** The member's primary name as shown on foto-log: their Fotolog name, else their handle, else their DID. */
+export function displayName(member: MemberRef): string {
+  return member.name ?? member.handle ?? member.did;
 }
 
-/** Turns a URL segment like "@alice.bsky.social" or "did:plc:…" into a handle or DID, or null. */
+/** The URL segment for a member: @name, @handle, or the DID. */
+function memberSegment(member: MemberRef): string {
+  if (member.name) return `@${member.name}`;
+  return member.handle ? `@${member.handle}` : member.did;
+}
+
+/** Path of the page for one day's photo, e.g. /@alice.bsky.social/2026-10-14. */
+export function photoPath(actor: MemberRef, uploadDate: string): string {
+  return `/${memberSegment(actor)}/${uploadDate}`;
+}
+
+/**
+ * Turns a URL segment like "@alice.bsky.social", "@alice" or "did:plc:…"
+ * into a handle, Fotolog name or DID, or null. Names have no dot, so they
+ * can't be mistaken for handles.
+ */
 export function parseActorParam(param: string): string | null {
   let value: string;
   try {
@@ -13,9 +35,12 @@ export function parseActorParam(param: string): string | null {
   } catch {
     return null;
   }
+  const hadAt = value.startsWith("@");
   value = value.replace(/^@/, "");
   if (isValidDid(value)) return value;
   const handle = value.toLowerCase();
+  // Names only with the @ (/@warren), so other one-word paths stay plain 404s.
+  if (looksLikeName(handle)) return hadAt ? handle : null;
   return isValidHandle(handle) ? handle : null;
 }
 
@@ -44,11 +69,11 @@ export function thumbnailUrl(did: string, cid: string): string {
 }
 
 /** Path of a member's member page, e.g. /@alice.bsky.social. */
-export function memberPath(actor: { did: string; handle: string | null }): string {
-  return actor.handle ? `/@${actor.handle}` : `/${actor.did}`;
+export function memberPath(actor: MemberRef): string {
+  return `/${memberSegment(actor)}`;
 }
 
 /** Path of a member's full Friends/Favorites list, e.g. /@alice.bsky.social/friends. */
-export function friendsPath(actor: { did: string; handle: string | null }): string {
+export function friendsPath(actor: MemberRef): string {
   return `${memberPath(actor)}/friends`;
 }

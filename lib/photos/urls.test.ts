@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blueskyPostUrl, imageUrl, memberPath, parseActorParam, photoPath, thumbnailUrl } from "./urls";
+import { blueskyPostUrl, displayName, friendsPath, imageUrl, memberPath, parseActorParam, photoPath, thumbnailUrl } from "./urls";
 
 describe("photoPath", () => {
   it("uses @handle when there is one, otherwise the DID", () => {
@@ -16,6 +16,13 @@ describe("parseActorParam", () => {
     expect(parseActorParam("%40Alice.bsky.social")).toBe("alice.bsky.social");
     expect(parseActorParam("alice.bsky.social")).toBe("alice.bsky.social");
     expect(parseActorParam("did:plc:ewvi7nxzyoun6zhxrhs64oiz")).toBe("did:plc:ewvi7nxzyoun6zhxrhs64oiz");
+  });
+
+  it("accepts Fotolog names, case-insensitively, only with the @", () => {
+    expect(parseActorParam("@warren")).toBe("warren");
+    expect(parseActorParam("%40Cypher_1")).toBe("cypher_1");
+    expect(parseActorParam("warren")).toBeNull();
+    expect(parseActorParam("@_warren")).toBeNull();
   });
 
   it("rejects things that aren't handles or DIDs", () => {
@@ -43,5 +50,17 @@ describe("memberPath and thumbnailUrl", () => {
     expect(memberPath({ did: "did:plc:abc", handle: "alice.bsky.social" })).toBe("/@alice.bsky.social");
     expect(memberPath({ did: "did:plc:abc", handle: null })).toBe("/did:plc:abc");
     expect(thumbnailUrl("did:plc:abc", "bafy")).toBe("https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:abc/bafy@jpeg");
+  });
+});
+
+describe("Fotolog names in paths", () => {
+  const m = { did: "did:plc:abc", handle: "alice.bsky.social", name: "alice" };
+  it("uses the name when it's primary, without an @ in display", () => {
+    expect(memberPath(m)).toBe("/@alice");
+    expect(photoPath(m, "2026-10-14")).toBe("/@alice/2026-10-14");
+    expect(friendsPath(m)).toBe("/@alice/friends");
+    expect(displayName(m)).toBe("alice");
+    expect(displayName({ did: "did:plc:abc", handle: "alice.bsky.social", name: null })).toBe("alice.bsky.social");
+    expect(displayName({ did: "did:plc:abc", handle: null })).toBe("did:plc:abc");
   });
 });

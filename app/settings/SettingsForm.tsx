@@ -6,6 +6,7 @@ import { contrastRatio, isHexColor, MIN_CONTRAST } from "@/lib/member-settings";
 import { resetSettings, type SaveState, saveSettings } from "./actions";
 import { useRouter } from "next/navigation";
 import MemberImageField, { type ImageError, NO_CHANGE, type PendingImage, saveImageChange } from "./MemberImageField";
+import FotologNameField from "./FotologNameField";
 import { useLeaveWarning } from "./useLeaveWarning";
 import WallpaperField from "./WallpaperField";
 
@@ -28,6 +29,8 @@ type Props = {
   memberPage: string;
   /** Saved page images; undefined if they couldn't be loaded. */
   images?: { titleImage: string | null; wallpaper: string | null; wallpaperMode: "tile" | "fill" };
+  /** The member's Fotolog name and Bluesky handle, and which one they're shown by. */
+  identity: { name: string | null; handle: string | null; primary: "fotolog" | "bluesky" };
 };
 
 function ColorField({
@@ -77,9 +80,18 @@ function ColorField({
   );
 }
 
-export default function SettingsForm({ initial, defaults, countries, hasSaved, memberPage, images }: Props) {
+export default function SettingsForm({ initial, defaults, countries, hasSaved, memberPage, images, identity }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Values>(initial);
+  const [primary, setPrimary] = useState(identity.primary);
+  // Setting a name makes it primary; follow the saved choice when it changes.
+  const [savedPrimary, setSavedPrimary] = useState(identity.primary);
+  if (savedPrimary !== identity.primary) {
+    setSavedPrimary(identity.primary);
+    setPrimary(identity.primary);
+  }
+  // Which Save was pressed, so the result shows beside it.
+  const [savedFrom, setSavedFrom] = useState<"profile" | "page">("page");
   // Image changes wait here until Save, like the rest of the form.
   const [titleImage, setTitleImage] = useState<PendingImage>(NO_CHANGE);
   const [wallpaper, setWallpaper] = useState<PendingImage>(NO_CHANGE);
@@ -129,6 +141,7 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, m
 
   const dirty =
     (Object.keys(values) as (keyof Values)[]).some((k) => values[k] !== initial[k]) ||
+    primary !== identity.primary ||
     titleImage.kind !== "none" ||
     wallpaper.kind !== "none" ||
     (images !== undefined && wallpaperMode !== images.wallpaperMode);
@@ -151,6 +164,17 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, m
         })
       : null;
 
+  const status =
+    state.status === "error" && state.message ? (
+      <p className="error" role="alert">
+        {state.message}
+      </p>
+    ) : state.status === "saved" ? (
+      <p className="notice-inline" role="status">
+        Saved.
+      </p>
+    ) : null;
+
   return (
     <>
       <form
@@ -159,165 +183,176 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, m
           // Submit via the action without React's automatic form reset, which
           // would visually reset the controlled <select>s after saving.
           e.preventDefault();
+          const submitter = (e.nativeEvent as SubmitEvent).submitter;
+          setSavedFrom(submitter?.dataset.section === "profile" ? "profile" : "page");
           const data = new FormData(e.currentTarget);
           startTransition(() => formAction(data));
         }}
       >
         {/* Locked while saving, so no edit is made after the values were sent. */}
         <fieldset className="settings-fields" disabled={pending}>
-          <div className="field">
-            <label htmlFor="title">Title</label>
-            <input
-              id="title"
-              name="title"
-              type="text"
-              value={values.title}
-              placeholder={defaults.title}
-              onChange={(e) => set("title")(e.target.value)}
-            />
-            <p className="hint">Leave blank to use &ldquo;{defaults.title}&rdquo;.</p>
-            {errors.title && <p className="field-error">{errors.title}</p>}
-          </div>
-
-          {images && (
-            <MemberImageField
-              field="titleImage"
-              label="Title Image"
-              current={images.titleImage}
-              pending={titleImage}
-              onChange={setTitleImage}
+          <section className="settings-section" aria-labelledby="profile-heading">
+            <h2 id="profile-heading">Profile</h2>
+            <FotologNameField
+              name={identity.name}
+              handle={identity.handle}
+              primary={primary}
+              onPrimaryChange={setPrimary}
               disabled={pending}
-              error={imageErrors.titleImage}
-              alt={values.title.trim() || defaults.title}
-              background={bg}
-              previewClassName="title-image-preview"
-              hint="Your title will be used as the alt text for the image. It replaces the text title across the top of your page. Wide images work best, like 738×60, shown up to 150px tall."
             />
-          )}
+            <fieldset className="field">
+              <legend>Location</legend>
+              <label htmlFor="country">Country</label>
+              <select id="country" name="country" value={values.country} onChange={(e) => set("country")(e.target.value)}>
+                <option value="">Not shown</option>
+                {countries.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {errors.country && <p className="field-error">{errors.country}</p>}
 
-          <fieldset className="field">
-            <legend>Location</legend>
-            <label htmlFor="country">Country</label>
-            <select id="country" name="country" value={values.country} onChange={(e) => set("country")(e.target.value)}>
-              <option value="">Not shown</option>
-              {countries.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            {errors.country && <p className="field-error">{errors.country}</p>}
+              {values.country && (
+                <>
+                  <label htmlFor="region">
+                    {regionLabel(values.country)}
+                    {!regions && <span className="optional"> (optional)</span>}
+                  </label>
+                  {regions ? (
+                    <select id="region" name="region" value={values.region} onChange={(e) => set("region")(e.target.value)}>
+                      <option value="">Not shown</option>
+                      {regions.map((r) => (
+                        <option key={r.code} value={r.code}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      id="region"
+                      name="region"
+                      type="text"
+                      value={values.region}
+                      onChange={(e) => set("region")(e.target.value)}
+                    />
+                  )}
+                  {errors.region && <p className="field-error">{errors.region}</p>}
 
-            {values.country && (
-              <>
-                <label htmlFor="region">
-                  {regionLabel(values.country)}
-                  {!regions && <span className="optional"> (optional)</span>}
-                </label>
-                {regions ? (
-                  <select id="region" name="region" value={values.region} onChange={(e) => set("region")(e.target.value)}>
-                    <option value="">Not shown</option>
-                    {regions.map((r) => (
-                      <option key={r.code} value={r.code}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
+                  <label htmlFor="locality">
+                    City or town <span className="optional">(optional)</span>
+                  </label>
                   <input
-                    id="region"
-                    name="region"
+                    id="locality"
+                    name="locality"
                     type="text"
-                    value={values.region}
-                    onChange={(e) => set("region")(e.target.value)}
+                    value={values.locality}
+                    onChange={(e) => set("locality")(e.target.value)}
                   />
-                )}
-                {errors.region && <p className="field-error">{errors.region}</p>}
+                  {errors.locality && <p className="field-error">{errors.locality}</p>}
+                </>
+              )}
+            </fieldset>
+            {savedFrom === "profile" && status}
+            <button type="submit" data-section="profile">
+              {pending && savedFrom === "profile" ? "Saving…" : "Save"}
+            </button>
+          </section>
 
-                <label htmlFor="locality">
-                  City or town <span className="optional">(optional)</span>
-                </label>
-                <input
-                  id="locality"
-                  name="locality"
-                  type="text"
-                  value={values.locality}
-                  onChange={(e) => set("locality")(e.target.value)}
-                />
-                {errors.locality && <p className="field-error">{errors.locality}</p>}
-              </>
-            )}
-          </fieldset>
-
-          <ColorField
-            id="backgroundColor"
-            label="Background color"
-            value={values.backgroundColor}
-            fallback={defaults.backgroundColor}
-            error={errors.backgroundColor}
-            onChange={set("backgroundColor")}
-          />
-          <ColorField
-            id="textColor"
-            label="Text color"
-            value={values.textColor}
-            fallback={defaults.textColor}
-            error={errors.textColor}
-            onChange={set("textColor")}
-          />
-          <ColorField
-            id="linkColor"
-            label="Link color"
-            value={values.linkColor}
-            fallback={fg}
-            error={errors.linkColor}
-            onChange={set("linkColor")}
-          />
-          <p className="hint">Leave the link color blank to match the text. Links show in the text color when hovered.</p>
-
-          <div className="field">
-            <span className="label">Preview</span>
-            <div className="member-preview" style={{ backgroundColor: bg, color: fg }}>
-              <strong>{values.title.trim() || defaults.title}</strong>
-              {previewLocation && <span>{previewLocation}</span>}
-              <span style={{ color: link, textDecoration: "underline" }}>A link</span>
+          <section className="settings-section" aria-labelledby="page-heading">
+            <h2 id="page-heading">Member Page Customization</h2>
+            <p className="muted">How your fotolog looks to everyone who visits it.</p>
+            <div className="field">
+              <label htmlFor="title">Title</label>
+              <input
+                id="title"
+                name="title"
+                type="text"
+                value={values.title}
+                placeholder={defaults.title}
+                onChange={(e) => set("title")(e.target.value)}
+              />
+              <p className="hint">Leave blank to use &ldquo;{defaults.title}&rdquo;.</p>
+              {errors.title && <p className="field-error">{errors.title}</p>}
             </div>
-            {Math.min(ratio, linkRatio) < MIN_CONTRAST && (
-              <p className="warning" role="status">
-                These colors may be hard to read (contrast {Math.min(ratio, linkRatio).toFixed(1)}:1; at least {MIN_CONTRAST}:1 is
-                recommended). You can still save them.
-              </p>
+
+            {images && (
+              <MemberImageField
+                field="titleImage"
+                label="Title Image"
+                current={images.titleImage}
+                pending={titleImage}
+                onChange={setTitleImage}
+                disabled={pending}
+                error={imageErrors.titleImage}
+                alt={values.title.trim() || defaults.title}
+                background={bg}
+                previewClassName="title-image-preview"
+                hint="Your title will be used as the alt text for the image. It replaces the text title across the top of your page. Wide images work best, like 738×60, shown up to 150px tall."
+              />
             )}
-          </div>
 
-          {images && (
-            <WallpaperField
-              current={images.wallpaper}
-              pending={wallpaper}
-              onChange={setWallpaper}
-              mode={wallpaperMode}
-              onModeChange={setWallpaperMode}
-              disabled={pending}
-              error={imageErrors.wallpaper}
-              background={bg}
+
+            <ColorField
+              id="backgroundColor"
+              label="Background color"
+              value={values.backgroundColor}
+              fallback={defaults.backgroundColor}
+              error={errors.backgroundColor}
+              onChange={set("backgroundColor")}
             />
-          )}
+            <ColorField
+              id="textColor"
+              label="Text color"
+              value={values.textColor}
+              fallback={defaults.textColor}
+              error={errors.textColor}
+              onChange={set("textColor")}
+            />
+            <ColorField
+              id="linkColor"
+              label="Link color"
+              value={values.linkColor}
+              fallback={fg}
+              error={errors.linkColor}
+              onChange={set("linkColor")}
+            />
+            <p className="hint">Leave the link color blank to match the text. Links show in the text color when hovered.</p>
 
+            <div className="field">
+              <span className="label">Preview</span>
+              <div className="member-preview" style={{ backgroundColor: bg, color: fg }}>
+                <strong>{values.title.trim() || defaults.title}</strong>
+                {previewLocation && <span>{previewLocation}</span>}
+                <span style={{ color: link, textDecoration: "underline" }}>A link</span>
+              </div>
+              {Math.min(ratio, linkRatio) < MIN_CONTRAST && (
+                <p className="warning" role="status">
+                  These colors may be hard to read (contrast {Math.min(ratio, linkRatio).toFixed(1)}:1; at least {MIN_CONTRAST}:1 is
+                  recommended). You can still save them.
+                </p>
+              )}
+            </div>
+
+            {images && (
+              <WallpaperField
+                current={images.wallpaper}
+                pending={wallpaper}
+                onChange={setWallpaper}
+                mode={wallpaperMode}
+                onModeChange={setWallpaperMode}
+                disabled={pending}
+                error={imageErrors.wallpaper}
+                background={bg}
+              />
+            )}
+
+            {savedFrom === "page" && status}
+            <button type="submit" data-section="page">
+              {pending && savedFrom === "page" ? "Saving…" : "Save"}
+            </button>
+          </section>
         </fieldset>
-
-        {state.status === "error" && state.message && (
-          <p className="error" role="alert">
-            {state.message}
-          </p>
-        )}
-        {state.status === "saved" && (
-          <p className="notice-inline" role="status">
-            Saved.
-          </p>
-        )}
-        <button type="submit" disabled={pending}>
-          {pending ? "Saving…" : "Save"}
-        </button>
       </form>
 
       {hasSaved && (
