@@ -944,7 +944,31 @@ body:has(.member-theme) .account-menu li button:hover {
 }
 
 .settings-page h1 {
-  margin: 0 0 24px;
+  margin: 0 0 16px;
+}
+
+.settings-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  list-style: none;
+  margin: 0 0 28px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-nav a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.settings-nav a:hover {
+  text-decoration: underline;
+}
+
+.settings-nav a[aria-current="page"] {
+  color: var(--fg);
+  font-weight: 600;
 }
 
 .settings-page h2 {

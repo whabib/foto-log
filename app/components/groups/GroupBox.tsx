@@ -49,7 +49,7 @@ export default function GroupBox({
           <Link href={postHref}>Post a photo to this group</Link>
         </li>
         <li>
-          <Link href="/settings#group">Manage members</Link>
+          <Link href="/settings/group">Manage members</Link>
         </li>
       </>
     );

@@ -9,19 +9,8 @@ import { approveMemberAction, type GroupSettingsResult, removeMemberAction, setG
 
 export type GroupMember = { did: string; handle: string | null; name: string | null; status: MembershipStatus };
 
-/**
- * In Settings' Profile: make the account a group, choose who can join, and
- * look after its members. Each change saves straight away, apart from the
- * form's Save.
- */
-export default function GroupSettings({
-  joinPolicy,
-  members,
-}: {
-  /** The group's policy, or null when the account isn't a group. */
-  joinPolicy: JoinPolicy | null;
-  members: GroupMember[];
-}) {
+/** Runs a group action, refreshing the page after it or keeping its error to show. */
+function useGroupAction() {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -31,14 +20,22 @@ export default function GroupSettings({
       setError(result.ok ? null : result.message);
       if (result.ok) router.refresh();
     });
-
   const errorLine = error && (
     <p className="field-error" role="alert">
       {error}
     </p>
   );
+  return { pending, run, errorLine };
+}
 
-  if (joinPolicy === null) {
+/**
+ * On the Profile page: turn the account into a group, or back. Saves
+ * straight away, apart from the form's Save.
+ */
+export function GroupToggle({ isGroup }: { isGroup: boolean }) {
+  const { pending, run, errorLine } = useGroupAction();
+
+  if (!isGroup) {
     return (
       <div className="field group-settings" id="group">
         <span className="label">Group</span>
@@ -65,6 +62,40 @@ export default function GroupSettings({
     );
   }
 
+  return (
+    <div className="field group-settings" id="group">
+      <span className="label">Group</span>
+      <p className="hint">
+        This account is a group. Members can post a photo to it once a day, so foto-log stays signed in to it
+        even after you sign out. To end that, choose Stop being a group, then sign out.
+      </p>
+      <p>
+        <Link href="/settings/group">Group Management</Link>: who can join, members and requests.
+      </p>
+      <button
+        type="button"
+        className="link-button"
+        disabled={pending}
+        onClick={() => {
+          if (
+            confirm(
+              "Stop being a group? Everyone is taken out of it, its photos stay on this fotolog, and foto-log lets go of this account's sign-in when you sign out.",
+            )
+          ) {
+            run(() => setGroupAction(null));
+          }
+        }}
+      >
+        {pending ? "Saving…" : "Stop being a group"}
+      </button>
+      {errorLine}
+    </div>
+  );
+}
+
+/** The Group Management page: who can join, requests waiting, and the members. */
+export function GroupManagement({ joinPolicy, members }: { joinPolicy: JoinPolicy; members: GroupMember[] }) {
+  const { pending, run, errorLine } = useGroupAction();
   const waiting = members.filter((m) => m.status === "pending");
   const joined = members.filter((m) => m.status === "member");
   const row = (m: GroupMember, buttons: React.ReactNode) => (
@@ -74,23 +105,9 @@ export default function GroupSettings({
   );
 
   return (
-    <div className="field group-settings" id="group">
-      <span className="label">Group</span>
-      <p className="hint">
-        This account is a group. Members can post a photo to it once a day, so foto-log stays signed in to it
-        even after you sign out. To end that, choose Stop being a group, then sign out.
-      </p>
+    <div className="settings-form group-settings">
       <fieldset className="group-policy" disabled={pending}>
-        <legend className="sr-only">Who can join</legend>
-        <label>
-          <input
-            type="radio"
-            name="joinPolicyChoice"
-            checked={joinPolicy === "open"}
-            onChange={() => run(() => setGroupAction("open"))}
-          />{" "}
-          Anyone can join
-        </label>
+        <legend className="label">Who can join</legend>
         <label>
           <input
             type="radio"
@@ -100,11 +117,22 @@ export default function GroupSettings({
           />{" "}
           Members need my approval
         </label>
+        <label>
+          <input
+            type="radio"
+            name="joinPolicyChoice"
+            checked={joinPolicy === "open"}
+            onChange={() => run(() => setGroupAction("open"))}
+          />{" "}
+          Anyone can join
+        </label>
       </fieldset>
 
-      {waiting.length > 0 && (
-        <>
-          <p className="group-list-heading">Waiting for approval</p>
+      <div>
+        <p className="group-list-heading">Waiting for approval ({waiting.length})</p>
+        {waiting.length === 0 ? (
+          <p className="hint">No one is waiting.</p>
+        ) : (
           <ul className="group-members">
             {waiting.map((m) =>
               row(
@@ -120,46 +148,35 @@ export default function GroupSettings({
               ),
             )}
           </ul>
-        </>
-      )}
+        )}
+      </div>
 
-      <p className="group-list-heading">Members ({joined.length})</p>
-      {joined.length === 0 ? (
-        <p className="hint">No members yet.</p>
-      ) : (
-        <ul className="group-members">
-          {joined.map((m) =>
-            row(
-              m,
-              <button
-                type="button"
-                className="link-button"
-                disabled={pending}
-                onClick={() => {
-                  if (confirm(`Remove ${displayName(m)} from the group? Their photos stay on it.`)) {
-                    run(() => removeMemberAction(m.did));
-                  }
-                }}
-              >
-                Remove
-              </button>,
-            ),
-          )}
-        </ul>
-      )}
-
-      <button
-        type="button"
-        className="link-button"
-        disabled={pending}
-        onClick={() => {
-          if (confirm("Stop being a group? Everyone is taken out of it, its photos stay on this fotolog, and foto-log lets go of this account's sign-in when you sign out.")) {
-            run(() => setGroupAction(null));
-          }
-        }}
-      >
-        Stop being a group
-      </button>
+      <div>
+        <p className="group-list-heading">Members ({joined.length})</p>
+        {joined.length === 0 ? (
+          <p className="hint">No members yet.</p>
+        ) : (
+          <ul className="group-members">
+            {joined.map((m) =>
+              row(
+                m,
+                <button
+                  type="button"
+                  className="link-button"
+                  disabled={pending}
+                  onClick={() => {
+                    if (confirm(`Remove ${displayName(m)} from the group? Their photos stay on it.`)) {
+                      run(() => removeMemberAction(m.did));
+                    }
+                  }}
+                >
+                  Remove
+                </button>,
+              ),
+            )}
+          </ul>
+        )}
+      </div>
       {errorLine}
     </div>
   );
