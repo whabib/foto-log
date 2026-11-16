@@ -13,6 +13,7 @@ const NAME_RE = new RegExp(`^[a-z0-9][a-z0-9_]{${NAME_MIN - 1},${NAME_MAX - 1}}$
 /** Names that would clash with foto-log's own pages, or that sound official. */
 const RESERVED = new Set([
   "about",
+  "account",
   "admin",
   "administrator",
   "api",
@@ -32,6 +33,8 @@ const RESERVED = new Set([
   "help",
   "home",
   "login",
+  "member",
+  "members",
   "logout",
   "mod",
   "moderator",
@@ -40,6 +43,7 @@ const RESERVED = new Set([
   "official",
   "post",
   "privacy",
+  "profile",
   "root",
   "security",
   "settings",
