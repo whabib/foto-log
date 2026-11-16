@@ -10,31 +10,45 @@ import { memberPageLook } from "@/lib/member-settings";
 import { resolveMemberPage } from "@/lib/member-resolve-server";
 import { getMemberImages } from "@/lib/member-profile-server";
 import { getMemberSettings } from "@/lib/member-settings-server";
-import { isValidDateKey, photoRecordKey } from "@/lib/photo-record";
+import { getGroup, memberCount, membership, type Group, type MembershipStatus } from "@/lib/groups-server";
+import { resolveActor } from "@/lib/identity";
+import { isValidDateKey, parsePhotoRecordKey, photoRecordKey } from "@/lib/photo-record";
 import { railWindow } from "@/lib/photos/rail";
 import { fetchPhoto, listPhotos, photoNeighbors, type StoredPhoto } from "@/lib/photos/server";
+import type { MemberRef } from "@/lib/photos/urls";
 
 export const RECENT_PHOTOS = 6;
 
+/** The record key a photo page's segment names: a date (its first photo) or a full key. */
+function keyForSegment(segment: string): string | null {
+  if (isValidDateKey(segment)) return photoRecordKey(segment, 1);
+  return parsePhotoRecordKey(segment) ? segment : null;
+}
+
+/** A group page's extras: the group, its size, and where the viewer stands. */
+export type GroupInfo = Group & { members: number; viewer: MembershipStatus | null };
+
 /**
  * Everything the member page needs. Without `date`, the center photo is the
- * newest one. Returns null if the actor can't be resolved, or if `date` is
- * given and has no photo. Cached per request, so metadata and the page
- * share one load.
+ * newest one. `date` is a day (its first photo) or a full record key, for a
+ * group's later photos of a day. Returns null if the actor can't be
+ * resolved, or if `date` is given and has no photo. Cached per request, so
+ * metadata and the page share one load.
  */
 export const loadMemberPage = cache(async (actorParam: string, date?: string) => {
-  if (date !== undefined && !isValidDateKey(date)) return null;
+  const key = date === undefined ? null : keyForSegment(date);
+  if (date !== undefined && !key) return null;
   const owner = await resolveMemberPage(actorParam, date ? `/${date}` : "");
   if (!owner) return null;
 
-  const [recent, dayPhoto, settings, avatar, user, images] = await Promise.all([
+  const [recent, dayPhoto, settings, avatar, user, images, group] = await Promise.all([
     listPhotos(owner, { limit: RECENT_PHOTOS }),
-    // One photo a day for now, so the day's photo is always -01.
-    date ? fetchPhoto(owner, photoRecordKey(date, 1)) : Promise.resolve(null),
+    key ? fetchPhoto(owner, key) : Promise.resolve(null),
     getMemberSettings(owner.did),
     blueskyAvatar(owner.did),
     getCurrentUser(),
     getMemberImages(owner),
+    getGroup(owner.did),
   ]);
   if (date && !dayPhoto) return null;
   const photo = date ? dayPhoto : (recent[0] ?? null);
@@ -68,6 +82,15 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
   const onViewerList = onList ? await onList : null;
   const canAdd = ownerIsMember ? await ownerIsMember : false;
 
+  const [groupInfo, uploader] = await Promise.all([
+    group
+      ? Promise.all([memberCount(group.did), user ? membership(group.did, user.did) : null]).then(
+          ([members, viewer]): GroupInfo => ({ ...group, members, viewer }),
+        )
+      : null,
+    photo?.record.uploadedBy ? uploaderOf(photo.record.uploadedBy) : null,
+  ]);
+
   return {
     owner,
     onViewerList,
@@ -83,8 +106,21 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     isOwner: user?.did === owner.did,
     signedIn: user !== null,
     signBlocked,
+    group: groupInfo,
+    uploader,
   };
 });
+
+/** Who posted a group's photo: their handle and primary name, or just their DID. */
+async function uploaderOf(did: string): Promise<MemberRef> {
+  try {
+    const [actor, names] = await Promise.all([resolveActor(did), primaryNames([did])]);
+    return { did, handle: actor?.handle ?? null, name: names.get(did) ?? null };
+  } catch (err) {
+    console.warn("Couldn't look up a photo's uploader", { did, err });
+    return { did, handle: null };
+  }
+}
 
 /** Adds each guestbook author's primary Fotolog name, without touching the cached entries. */
 async function withAuthorNames(guestbook: Guestbook): Promise<Guestbook> {

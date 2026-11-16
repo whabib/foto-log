@@ -23,6 +23,8 @@ export interface Main {
   alt?: string
   aspectRatio?: AspectRatio
   caption?: string
+  /** On a group's fotolog, the member who posted the photo. Absent when the account posted it itself. */
+  uploadedBy?: string
   /** Calendar date (YYYY-MM-DD) the photo was posted, in the poster's time zone. The record key starts with this date. */
   uploadDate: string
   /** Calendar date (YYYY-MM-DD) the photo is shown under. Always equals uploadDate for now. */

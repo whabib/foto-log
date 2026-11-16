@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blueskyPostUrl, displayName, friendsPath, imageUrl, memberPath, parseActorParam, photoPath, thumbnailUrl } from "./urls";
+import { blueskyPostUrl, displayName, friendsPath, imageUrl, memberPath, parseActorParam, photoKeyPath, photoPath, thumbnailUrl } from "./urls";
 
 describe("photoPath", () => {
   it("uses @handle when there is one, otherwise the DID", () => {
@@ -7,6 +7,14 @@ describe("photoPath", () => {
       "/@alice.bsky.social/2026-10-14",
     );
     expect(photoPath({ did: "did:plc:abc", handle: null }, "2026-10-14")).toBe("/did:plc:abc/2026-10-14");
+  });
+});
+
+describe("photoKeyPath", () => {
+  const alice = { did: "did:plc:abc", handle: "alice.bsky.social" };
+  it("puts a day's first photo at the date and later ones at their key", () => {
+    expect(photoKeyPath(alice, "2026-10-14-01")).toBe("/@alice.bsky.social/2026-10-14");
+    expect(photoKeyPath(alice, "2026-10-14-02")).toBe("/@alice.bsky.social/2026-10-14-02");
   });
 });
 

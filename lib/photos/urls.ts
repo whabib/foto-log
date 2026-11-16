@@ -23,6 +23,19 @@ export function photoPath(actor: MemberRef, uploadDate: string): string {
   return `/${memberSegment(actor)}/${uploadDate}`;
 }
 
+const RKEY_RE = /^(\d{4}-\d{2}-\d{2})-(\d{2})$/;
+
+/**
+ * Path of the page for the photo with record key `rkey`. A day's first
+ * photo lives at the date (/@alice/2026-10-14); later ones, which groups
+ * have, at the full key (/@alice/2026-10-14-03).
+ */
+export function photoKeyPath(actor: MemberRef, rkey: string): string {
+  const m = RKEY_RE.exec(rkey);
+  if (m && m[2] === "01") return photoPath(actor, m[1]);
+  return `/${memberSegment(actor)}/${rkey}`;
+}
+
 /**
  * Turns a URL segment like "@alice.bsky.social", "@alice" or "did:plc:…"
  * into a handle, Fotolog name or DID, or null. Names have no dot, so they

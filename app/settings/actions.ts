@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { type SettingsField, validateMemberSettings } from "@/lib/member-settings";
 import { resetMemberSettings, saveMemberSettings } from "@/lib/member-settings-server";
+import { approveRequest, leaveGroup, setGroup } from "@/lib/groups-server";
 import { checkName, memberName, type SetNameResult, setFotologName, setShowFotologName } from "@/lib/fotolog-name-server";
 
 export type SaveState =
@@ -69,4 +70,45 @@ export async function claimFotologName(input: string): Promise<SetNameResult> {
     console.error("Setting Fotolog name failed", { did: user.did, err });
     return { ok: false, message: "Something went wrong. Please try again." };
   }
+}
+
+export type GroupSettingsResult = { ok: true } | { ok: false; message: string };
+
+async function asGroupOwner(
+  what: string,
+  fn: (did: string) => Promise<void>,
+): Promise<GroupSettingsResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, message: "Please sign in again." };
+  try {
+    await fn(user.did);
+  } catch (err) {
+    console.error(`${what} failed`, { did: user.did, err });
+    return { ok: false, message: "Something went wrong. Please try again." };
+  }
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/**
+ * Makes the signed-in account a group with `joinPolicy`, changes its
+ * policy, or with null makes it an ordinary account again.
+ */
+export async function setGroupAction(joinPolicy: string | null): Promise<GroupSettingsResult> {
+  if (joinPolicy !== null && joinPolicy !== "open" && joinPolicy !== "approval") {
+    return { ok: false, message: "Unknown setting." };
+  }
+  return asGroupOwner("Changing group settings", (did) => setGroup(did, joinPolicy));
+}
+
+/** Lets a waiting member into the signed-in group. */
+export async function approveMemberAction(memberDid: string): Promise<GroupSettingsResult> {
+  return asGroupOwner("Approving a group member", (did) =>
+    approveRequest({ did, handle: null }, String(memberDid)),
+  );
+}
+
+/** Removes a member from the signed-in group, or declines their request. */
+export async function removeMemberAction(memberDid: string): Promise<GroupSettingsResult> {
+  return asGroupOwner("Removing a group member", (did) => leaveGroup(did, String(memberDid)));
 }

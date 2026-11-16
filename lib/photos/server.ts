@@ -4,6 +4,8 @@ import type { CurrentUser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { resolveActor, type Actor } from "@/lib/identity";
 import { primaryName } from "@/lib/fotolog-name-server";
+import { withLock } from "@/lib/db";
+import { getGroup, membership } from "@/lib/groups-server";
 import { getOAuthClient } from "@/lib/oauth/client";
 import { fetchFromPds } from "@/lib/safe-fetch";
 import {
@@ -13,12 +15,13 @@ import {
   isValidTimeZone,
   MAX_IMAGE_BYTES,
   nextPhotoRecordKey,
+  parsePhotoRecordKey,
   PHOTO_COLLECTION,
   photoRecordKey,
   type PhotoRecord,
 } from "@/lib/photo-record";
 import { buildPostText, graphemeLength, maxCaptionGraphemes } from "./text";
-import { photoPath } from "./urls";
+import { photoKeyPath, photoPath } from "./urls";
 
 const POST_COLLECTION = "app.bsky.feed.post";
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -32,7 +35,9 @@ export class PhotoError extends Error {
       | "already_posted"
       | "session_expired"
       | "not_found"
-      | "forbidden",
+      | "forbidden"
+      | "day_full"
+      | "unavailable",
     message: string,
     readonly path?: string,
   ) {
@@ -99,7 +104,11 @@ export function photoUrlFor(identity: Identity, uploadDate: string): string {
   return `${baseUrl}${photoPath(identity, uploadDate)}`;
 }
 
-export function validatePhotoInput(identity: Identity, input: PhotoInput, uploadDate: string) {
+/**
+ * Checks a photo before upload. `photoUrl` is the longest link the Bluesky
+ * post could carry, which bounds the caption.
+ */
+export function validatePhotoInput(photoUrl: string, input: PhotoInput) {
   if (!ACCEPTED_TYPES.has(input.mimeType)) {
     throw new PhotoError("invalid", "Please choose a JPEG, PNG or WebP image.");
   }
@@ -114,7 +123,6 @@ export function validatePhotoInput(identity: Identity, input: PhotoInput, upload
   if (!isValidTimeZone(input.timeZone)) {
     throw new PhotoError("invalid", "We couldn't tell your time zone. Please try again.");
   }
-  const photoUrl = photoUrlFor(identity, uploadDate);
   const caption = input.caption.trim();
   const maxCaption = maxCaptionGraphemes(photoUrl);
   if (graphemeLength(caption) > maxCaption) {
@@ -132,27 +140,141 @@ export function validatePhotoInput(identity: Identity, input: PhotoInput, upload
   }
 }
 
+/** Most photos a group takes in one day, from all its members together. */
+export const GROUP_DAILY_LIMIT = 50;
+
+/**
+ * The longest page URL a photo of `identity`'s could have: a group's later
+ * photos of a day carry the full record key.
+ */
+export function longestPhotoUrl(identity: Identity, group: boolean): string {
+  const date = "2000-01-01";
+  return `${baseUrl}${group ? photoKeyPath(identity, photoRecordKey(date, 2)) : photoPath(identity, date)}`;
+}
+
+/** Where a group can't take a member's photo, and why. */
+async function groupCheck(user: CurrentUser, groupDid: string): Promise<void> {
+  const group = await getGroup(groupDid);
+  if (!group) throw new PhotoError("not_found", "That account isn't a group anymore.");
+  if (groupDid !== user.did && (await membership(groupDid, user.did)) !== "member") {
+    throw new PhotoError("forbidden", "Only members can post to this group.");
+  }
+}
+
+/**
+ * The record keys a group already has on `uploadDate`, and who posted each
+ * (the group's own DID when it posted itself). Read from its repo, invalid
+ * records included, since they hold their keys too.
+ */
+async function groupDay(
+  agent: Agent,
+  groupDid: string,
+  uploadDate: string,
+): Promise<{ rkey: string; sequence: number; uploader: string }[]> {
+  // Keys sort by date then sequence, and listRecords pages downwards from
+  // the cursor, so "<date>." (just above "<date>-99") starts at that day.
+  const { data } = await agent.com.atproto.repo.listRecords({
+    repo: groupDid,
+    collection: PHOTO_COLLECTION,
+    limit: 100,
+    cursor: `${uploadDate}.`,
+  });
+  const day: { rkey: string; sequence: number; uploader: string }[] = [];
+  for (const r of data.records) {
+    const rkey = r.uri.split("/").pop() ?? "";
+    const key = parsePhotoRecordKey(rkey);
+    if (!key || key.uploadDate !== uploadDate) continue;
+    const by = (r.value as { uploadedBy?: unknown }).uploadedBy;
+    day.push({ rkey, sequence: key.sequence, uploader: typeof by === "string" ? by : groupDid });
+  }
+  return day;
+}
+
 /**
  * Posts today's photo for `user`: uploads the image, creates the Bluesky
- * post that shares it, then the com.foto-log.photo record. Returns the
- * photo page path.
+ * post that shares it, then the com.foto-log.photo record. With `groupDid`,
+ * posts it to that group's fotolog instead, from the group's account and
+ * credited to `user`: each member once a day, up to GROUP_DAILY_LIMIT in
+ * all. Returns the photo page path.
  */
-export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<string> {
+export async function postPhoto(
+  user: CurrentUser,
+  input: PhotoInput,
+  opts: { groupDid?: string } = {},
+): Promise<string> {
   const now = new Date();
+  const groupDid = opts.groupDid;
+  if (groupDid) await groupCheck(user, groupDid);
+  const repo = groupDid ?? user.did;
   const uploadDate = isValidTimeZone(input.timeZone) ? dateKeyFor(now, input.timeZone) : "";
-  const identity = await currentIdentity(user);
-  validatePhotoInput(identity, input, uploadDate);
-  const path = photoPath(identity, uploadDate);
+  const identity = await currentIdentity({ did: repo, handle: null });
+  validatePhotoInput(longestPhotoUrl(identity, Boolean(groupDid)), input);
 
-  const agent = await agentFor(user.did);
-  // One photo a day for now: the only possible key is -01.
-  const firstKey = photoRecordKey(uploadDate, 1);
-  const taken = await recordExists(agent, user.did, PHOTO_COLLECTION, firstKey);
-  const rkey = nextPhotoRecordKey(uploadDate, taken ? [1] : []);
-  if (!rkey) {
-    throw new PhotoError("already_posted", "You've already posted a photo today.", path);
+  let agent: Agent;
+  try {
+    agent = await agentFor(repo);
+  } catch (err) {
+    if (groupDid && groupDid !== user.did) {
+      throw new PhotoError(
+        "unavailable",
+        "This group can't take photos right now. Its owner needs to sign in to foto-log as the group again.",
+      );
+    }
+    throw err;
   }
 
+  if (!groupDid) {
+    const path = photoPath(identity, uploadDate);
+    // One photo a day for now: the only possible key is -01.
+    const firstKey = photoRecordKey(uploadDate, 1);
+    const taken = await recordExists(agent, repo, PHOTO_COLLECTION, firstKey);
+    const rkey = nextPhotoRecordKey(uploadDate, taken ? [1] : []);
+    if (!rkey) {
+      throw new PhotoError("already_posted", "You've already posted a photo today.", path);
+    }
+    await writePhoto(agent, repo, rkey, path, input, now);
+    return path;
+  }
+
+  // One post to a group at a time, so two members can't take the same key
+  // and one member can't post twice by double-submitting.
+  return withLock(`group-post:${groupDid}`, async () => {
+    const day = await groupDay(agent, groupDid, uploadDate);
+    const mine = day.find((p) => p.uploader === user.did);
+    if (mine) {
+      throw new PhotoError(
+        "already_posted",
+        "You've already posted to this group today.",
+        photoKeyPath(identity, mine.rkey),
+      );
+    }
+    const rkey = nextPhotoRecordKey(
+      uploadDate,
+      day.map((p) => p.sequence),
+      GROUP_DAILY_LIMIT,
+    );
+    if (!rkey) {
+      throw new PhotoError("day_full", `This group has had its ${GROUP_DAILY_LIMIT} photos today. Try again tomorrow.`);
+    }
+    const path = photoKeyPath(identity, rkey);
+    await writePhoto(agent, repo, rkey, path, input, now, groupDid === user.did ? undefined : user.did);
+    return path;
+  });
+}
+
+/**
+ * Uploads the image, then creates the Bluesky post and the photo record at
+ * `rkey` in `repo`. If the record can't be written, deletes the post again.
+ */
+async function writePhoto(
+  agent: Agent,
+  repo: string,
+  rkey: string,
+  path: string,
+  input: PhotoInput,
+  now: Date,
+  uploadedBy?: string,
+): Promise<void> {
   const { data: upload } = await agent.com.atproto.repo.uploadBlob(input.image, {
     encoding: input.mimeType,
   });
@@ -162,7 +284,7 @@ export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<s
   const { text, facets } = buildPostText(caption, `${baseUrl}${path}`);
 
   const { data: post } = await agent.com.atproto.repo.createRecord({
-    repo: user.did,
+    repo,
     collection: POST_COLLECTION,
     record: {
       $type: POST_COLLECTION,
@@ -177,6 +299,7 @@ export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<s
   });
 
   try {
+    const sequence = parsePhotoRecordKey(rkey)?.sequence ?? 1;
     const { record } = buildPhotoRecord({
       post: { uri: post.uri, cid: post.cid },
       image: upload.blob,
@@ -185,16 +308,18 @@ export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<s
       caption: caption || undefined,
       now,
       timeZone: input.timeZone,
+      sequence,
+      uploadedBy,
     });
     // createRecord with an explicit key fails if the key exists, so two
-    // uploads racing for the same day can't both succeed.
+    // uploads racing for the same key can't both succeed.
     const { data: created } = await agent.com.atproto.repo.createRecord({
-      repo: user.did,
+      repo,
       collection: PHOTO_COLLECTION,
       rkey,
       record,
     });
-    await updateIndex((index) => index.indexPhoto(user.did, rkey, created.cid, record));
+    await updateIndex((index) => index.indexPhoto(repo, rkey, created.cid, record));
   } catch (err) {
     // The write may have succeeded with the response lost, or failed because
     // another upload took this key. Read back before deleting anything.
@@ -202,7 +327,7 @@ export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<s
     let saved = false;
     try {
       const { data } = await agent.com.atproto.repo.getRecord({
-        repo: user.did,
+        repo,
         collection: PHOTO_COLLECTION,
         rkey,
       });
@@ -218,10 +343,10 @@ export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<s
         throw err;
       }
     }
-    if (savedPostUri === post.uri) return path; // it was saved after all
+    if (savedPostUri === post.uri) return; // it was saved after all
     const postRkey = post.uri.split("/").pop()!;
     await agent.com.atproto.repo
-      .deleteRecord({ repo: user.did, collection: POST_COLLECTION, rkey: postRkey })
+      .deleteRecord({ repo, collection: POST_COLLECTION, rkey: postRkey })
       .catch((cleanupErr) =>
         console.error("Couldn't delete Bluesky post after failed photo write", {
           uri: post.uri,
@@ -229,17 +354,31 @@ export async function postPhoto(user: CurrentUser, input: PhotoInput): Promise<s
         }),
       );
     if (saved) {
-      throw new PhotoError("already_posted", "You've already posted a photo today.", path);
+      throw new PhotoError("already_posted", "A photo was just posted here. Please try again.", path);
     }
     throw err;
   }
-  return path;
 }
 
-/** Whether `user` has posted on today's date in `timeZone`, and where. */
-export async function todaysPhotoPath(user: CurrentUser, timeZone: string): Promise<string | null> {
+/**
+ * Whether `user` has posted on today's date in `timeZone`, and where. With
+ * `groupDid`, whether they've posted to that group today.
+ */
+export async function todaysPhotoPath(
+  user: CurrentUser,
+  timeZone: string,
+  groupDid?: string,
+): Promise<string | null> {
   if (!isValidTimeZone(timeZone)) throw new PhotoError("invalid", "Unknown time zone.");
   const uploadDate = dateKeyFor(new Date(), timeZone);
+  if (groupDid) {
+    await groupCheck(user, groupDid);
+    const identity = await currentIdentity({ did: groupDid, handle: null });
+    const agent = await agentFor(groupDid).catch(() => null);
+    if (!agent) return null; // postPhoto says why
+    const mine = (await groupDay(agent, groupDid, uploadDate)).find((p) => p.uploader === user.did);
+    return mine ? photoKeyPath(identity, mine.rkey) : null;
+  }
   const actor = await resolveActor(user.did);
   if (!actor) return null;
   const photo = await fetchPhoto(actor, photoRecordKey(uploadDate, 1));

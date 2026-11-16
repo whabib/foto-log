@@ -57,6 +57,13 @@
       "when": 1794854589296,
       "tag": "0007_multi_account",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794859786360,
+      "tag": "0008_groups",
+      "breakpoints": true
     }
   ]
 }

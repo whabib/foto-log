@@ -7,6 +7,8 @@ import { resetSettings, type SaveState, saveSettings } from "./actions";
 import { useRouter } from "next/navigation";
 import MemberImageField, { type ImageError, NO_CHANGE, type PendingImage, saveImageChange } from "./MemberImageField";
 import FotologNameField from "./FotologNameField";
+import GroupSettings, { type GroupMember } from "./GroupSettings";
+import type { JoinPolicy } from "@/lib/groups-server";
 import { useLeaveWarning } from "./useLeaveWarning";
 import WallpaperField from "./WallpaperField";
 
@@ -31,6 +33,8 @@ type Props = {
   images?: { titleImage: string | null; wallpaper: string | null; wallpaperMode: "tile" | "fill" };
   /** The member's Fotolog name and Bluesky handle, and which one they're shown by. */
   identity: { name: string | null; handle: string | null; primary: "fotolog" | "bluesky" };
+  /** Whether the account is a group, and its members; undefined if that couldn't be loaded. */
+  group?: { joinPolicy: JoinPolicy | null; members: GroupMember[] };
 };
 
 function ColorField({
@@ -80,7 +84,7 @@ function ColorField({
   );
 }
 
-export default function SettingsForm({ initial, defaults, countries, hasSaved, memberPage, images, identity }: Props) {
+export default function SettingsForm({ initial, defaults, countries, hasSaved, memberPage, images, identity, group }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Values>(initial);
   const [primary, setPrimary] = useState(identity.primary);
@@ -257,6 +261,7 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, m
             <button type="submit" data-section="profile">
               {pending && savedFrom === "profile" ? "Saving…" : "Save"}
             </button>
+            {group && <GroupSettings joinPolicy={group.joinPolicy} members={group.members} />}
           </section>
 
           <section className="settings-section" aria-labelledby="page-heading">

@@ -176,8 +176,6 @@ export async function recentPhotos(limit: number): Promise<(IndexedPhoto & { nam
       FROM ${photoIndex} p
       JOIN ${member} m ON m.did = p.did
       WHERE p.created_at <= now() + interval '5 minutes'
-        -- Day pages show a day's -01 photo, so only those have a page to link to.
-        AND p.rkey LIKE '%-01'
       ORDER BY p.did, p.created_at DESC
     ) latest
     ORDER BY created_at DESC

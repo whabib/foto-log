@@ -1,3 +1,4 @@
+import { isValidDid } from "@atproto/syntax";
 import { getCurrentUser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { PhotoError, postPhoto } from "@/lib/photos/server";
@@ -10,9 +11,14 @@ const STATUS: Record<PhotoError["code"], number> = {
   forbidden: 403,
   not_found: 404,
   already_posted: 409,
+  day_full: 409,
+  unavailable: 503,
 };
 
-/** Posts today's photo for the signed-in user. Body: multipart form from /post. */
+/**
+ * Posts today's photo for the signed-in user, or with a `group` field, to
+ * that group. Body: multipart form from /post.
+ */
 export async function POST(request: Request) {
   // The session cookie is SameSite=Lax, but check the origin too.
   if (request.headers.get("origin") !== new URL(baseUrl).origin) {
@@ -34,6 +40,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "Please choose a photo." }, { status: 400 });
   }
 
+  const group = form.get("group");
+  const groupDid = typeof group === "string" && group ? group : undefined;
+  if (groupDid !== undefined && !isValidDid(groupDid)) {
+    return Response.json({ error: "Unknown group." }, { status: 400 });
+  }
+
   try {
     const path = await postPhoto(user, {
       image: new Uint8Array(await image.arrayBuffer()),
@@ -43,7 +55,7 @@ export async function POST(request: Request) {
       caption: String(form.get("caption") ?? ""),
       alt: String(form.get("alt") ?? ""),
       timeZone: String(form.get("timeZone") ?? ""),
-    });
+    }, { groupDid });
     return Response.json({ path }, { status: 201 });
   } catch (err) {
     if (err instanceof PhotoError) {

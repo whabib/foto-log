@@ -122,6 +122,8 @@ export type PhotoRecordInput = {
   timeZone: string;
   /** Which photo of the day this is (1-99). Always 1 while the daily limit is 1. */
   sequence?: number;
+  /** On a group's fotolog, the member posting it. */
+  uploadedBy?: string;
 };
 
 export type PhotoRecord = Photo.Record;
@@ -149,6 +151,7 @@ export function buildPhotoRecord(input: PhotoRecordInput): {
         }
       : {}),
     ...(input.caption ? { caption: input.caption } : {}),
+    ...(input.uploadedBy ? { uploadedBy: input.uploadedBy } : {}),
     uploadDate,
     displayDate: uploadDate,
     timeZone: input.timeZone,

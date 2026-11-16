@@ -97,3 +97,30 @@ export const appState = pgTable("app_state", {
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Accounts that have been made into groups. A group is its own Bluesky
+ * account: members' photos are written to the group's repo with its stored
+ * OAuth session, so a group's tokens are kept when it signs out.
+ */
+export const fotologGroup = pgTable("fotolog_group", {
+  did: text("did").primaryKey(),
+  /** "open": anyone can join. "approval": the group approves each request. */
+  joinPolicy: text("join_policy").notNull().default("open"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Who belongs to which group, or has asked to. */
+export const groupMember = pgTable(
+  "group_member",
+  {
+    groupDid: text("group_did")
+      .notNull()
+      .references(() => fotologGroup.did, { onDelete: "cascade" }),
+    memberDid: text("member_did").notNull(),
+    /** "member", or "pending" while a request waits for approval. */
+    status: text("status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.groupDid, t.memberDid] }), index("group_member_member_idx").on(t.memberDid)],
+);
