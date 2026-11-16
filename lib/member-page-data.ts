@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { blueskyAvatar } from "@/lib/bsky-profile";
-import { isOnList } from "@/lib/friends-server";
+import { isMember, isOnList } from "@/lib/friends-server";
 import { getGuestbook, mayReply, notAllowedMessage } from "@/lib/guestbook/server";
 import { resolveActor } from "@/lib/identity";
 import { memberPageLook } from "@/lib/member-settings";
@@ -57,6 +57,8 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
 
   // Other members' pages offer to add them to, or remove them from, the viewer's list.
   const onList = user && user.did !== owner.did ? isOnList(user.did, owner.did) : null;
+  // Only members can be added; anyone else gets an invite instead.
+  const ownerIsMember = onList ? isMember(owner.did) : null;
   const guestbook = photo ? await getGuestbook(owner.did, photo.record.post.uri) : null;
   // Why the viewer can't sign an open guestbook, if they can't.
   const signBlocked =
@@ -65,10 +67,12 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
       : null;
 
   const onViewerList = onList ? await onList : null;
+  const canAdd = ownerIsMember ? await ownerIsMember : false;
 
   return {
     owner,
     onViewerList,
+    canAdd,
     guestbook,
     look: memberPageLook(settings, owner),
     images,

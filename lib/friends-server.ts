@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import type { CurrentUser } from "@/lib/auth";
-import { getDb, withLock } from "@/lib/db";
+import { getDb, getPool, withLock } from "@/lib/db";
 import { member } from "@/lib/db/schema";
 import {
   FRIEND_CARDS,
@@ -15,25 +15,18 @@ import {
   STARTER_FRIEND,
 } from "@/lib/friends";
 import { type Actor, resolveActor } from "@/lib/identity";
-import { agentFor, listPhotos, PhotoError } from "@/lib/photos/server";
+import { agentFor, PhotoError } from "@/lib/photos/server";
 import { photoPath, thumbnailUrl } from "@/lib/photos/urls";
 import { fetchFromPds } from "@/lib/safe-fetch";
 import { TtlCache } from "@/lib/ttl-cache";
 
 /** listRecords pages (of 100) to read for one list: enough for a full one. */
 const MAX_LIST_PAGES = Math.ceil(MAX_FRIENDS / 100);
-/** Most friends whose newest photo is read for the right column. */
-const MAX_CARD_LOOKUPS = 200;
-const LOOKUP_CONCURRENCY = 16;
-/** How long the full list waits for friends' photos before showing what it has. */
-const FULL_LIST_DEADLINE_MS = 6000;
 
 // A member's own changes clear their entry.
 const listCache = new TtlCache<string, string[]>(60_000, 5000);
 // Whether one member is on another's list, keyed "viewer subject".
 const onListCache = new TtlCache<string, boolean>(60_000, 10_000);
-// Each friend's handle and newest photo, shared by every list they're on.
-const rowCache = new TtlCache<string, FriendRow>(5 * 60_000, 10_000);
 
 /**
  * The DIDs on `actor`'s Friends/Favorites list, read from their repo, in
@@ -113,64 +106,48 @@ export async function isOnList(viewerDid: string, did: string): Promise<boolean>
   return onList;
 }
 
-/** The friend's handle and newest photo. Without a handle or photo if they can't be read. */
-async function friendRow(did: string): Promise<FriendRow> {
-  const hit = rowCache.get(did);
-  if (hit) return hit.value;
-  const actor = await resolveActor(did);
-  // Don't cache: resolution may be failing for a moment.
-  if (!actor) return { did, handle: null, latest: null };
-  const [photo] = await listPhotos(actor, { limit: 1 });
-  const latest: FriendCard | null = photo
-    ? {
-        did,
-        handle: actor.handle,
-        path: photoPath(actor, photo.record.uploadDate),
-        thumbnail: thumbnailUrl(did, photo.record.image.ref.toString()),
-        alt: photo.record.alt ?? "",
-        createdAt: photo.record.createdAt,
-      }
-    : null;
-  const row = { did, handle: actor.handle, latest };
-  rowCache.set(did, row);
-  return row;
-}
-
-/** Runs `fn` over `items`, at most `limit` at a time. */
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i], i);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
-}
-
 /**
- * Each friend on `dids` with their newest photo, read from their own PDS
- * until the index (#6) can answer this. With `deadlineMs`, friends not read
- * by then come back without a handle or photo; their lookups carry on and
- * fill the cache for the next view.
+ * The members among `dids`, each with their handle and newest photo, from
+ * the member table and the photo index. DIDs that aren't foto-log members
+ * are left out: they stay on the list and show up once they sign in.
  */
-async function friendRows(dids: string[], deadlineMs?: number): Promise<FriendRow[]> {
-  const done: (FriendRow | undefined)[] = new Array(dids.length);
-  const all = mapLimit(dids, LOOKUP_CONCURRENCY, async (did, i) => {
-    const row = await friendRow(did).catch(() => ({ did, handle: null, latest: null }));
-    done[i] = row;
-    return row;
+async function memberRows(dids: string[]): Promise<FriendRow[]> {
+  if (dids.length === 0) return [];
+  const pool = await getPool();
+  const { rows } = await pool.query<{
+    did: string;
+    handle: string | null;
+    image_cid: string | null;
+    alt: string | null;
+    upload_date: string | null;
+    created_at: Date | null;
+  }>(
+    `SELECT m.did, m.handle, p.image_cid, p.alt, p.upload_date, p.created_at
+     FROM member m
+     LEFT JOIN LATERAL (
+       -- Day pages show a day's -01 photo, so only those have a page to link to.
+       SELECT image_cid, alt, upload_date, created_at FROM photo_index
+       WHERE did = m.did AND rkey LIKE '%-01' AND created_at <= now() + interval '5 minutes'
+       ORDER BY created_at DESC LIMIT 1
+     ) p ON true
+     WHERE m.did = ANY($1::text[])`,
+    [dids],
+  );
+  return rows.map((r) => {
+    const owner = { did: r.did, handle: r.handle };
+    const latest: FriendCard | null =
+      r.image_cid && r.upload_date && r.created_at
+        ? {
+            did: r.did,
+            handle: r.handle,
+            path: photoPath(owner, r.upload_date),
+            thumbnail: thumbnailUrl(r.did, r.image_cid),
+            alt: r.alt ?? "",
+            createdAt: r.created_at.toISOString(),
+          }
+        : null;
+    return { did: r.did, handle: r.handle, latest };
   });
-  if (deadlineMs === undefined) return all;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), deadlineMs);
-  });
-  const rows = await Promise.race([all, timeout]);
-  clearTimeout(timer);
-  return rows ?? dids.map((did, i) => done[i] ?? { did, handle: null, latest: null });
 }
 
 /**
@@ -178,16 +155,23 @@ async function friendRows(dids: string[], deadlineMs?: number): Promise<FriendRo
  * newest photos, one card each, newest first.
  */
 export async function friendCards(owner: Actor, count = FRIEND_CARDS): Promise<FriendCard[]> {
-  const rows = await friendRows((await listFriends(owner)).slice(0, MAX_CARD_LOOKUPS));
+  const rows = await memberRows(await listFriends(owner));
   return newestCards(
     rows.map((r) => r.latest),
     count,
   );
 }
 
-/** Everyone on `owner`'s list, with their newest photos, for the full Friends/Favorites page. */
+/** Everyone on `owner`'s list who is a foto-log member, with their newest photos, for the full page. */
 export async function allFriends(owner: Actor): Promise<FriendRow[]> {
-  return friendRows(await listFriends(owner), FULL_LIST_DEADLINE_MS);
+  return memberRows(await listFriends(owner));
+}
+
+/** Whether `did` has signed in to foto-log, so can be added to a Friends/Favorites list. */
+export async function isMember(did: string): Promise<boolean> {
+  const db = await getDb();
+  const [row] = await db.select({ did: member.did }).from(member).where(eq(member.did, did)).limit(1);
+  return row !== undefined;
 }
 
 function errorName(err: unknown): string | undefined {
@@ -225,9 +209,16 @@ async function writeList(user: CurrentUser, did: string, write: () => Promise<vo
   }
 }
 
-/** Adds `did` to `user`'s Friends/Favorites. Adding someone already on the list does nothing. */
-export async function addFriend(user: CurrentUser, did: string): Promise<void> {
+/**
+ * Adds `did` to `user`'s Friends/Favorites. Adding someone already on the
+ * list does nothing. Only foto-log members can be added, except the starter
+ * friend for new members.
+ */
+export async function addFriend(user: CurrentUser, did: string, opts: { starter?: boolean } = {}): Promise<void> {
   const rkey = checkFriend(user, did);
+  if (!opts.starter && !(await isMember(did))) {
+    throw new PhotoError("invalid", "Only foto-log members can be added. Invite them to start a fotolog!");
+  }
   const self = await resolveActor(user.did);
   const list = self ? await listFriends(self, { fresh: true }) : [];
   if (list.length >= MAX_FRIENDS && !list.includes(did)) {
@@ -280,8 +271,9 @@ export async function welcomeNewMember(user: CurrentUser): Promise<void> {
         console.warn("Couldn't resolve the starter friend", { handle: STARTER_FRIEND });
         return; // tried again next sign-in
       }
-      if (starter.did !== user.did) await addFriend(user, starter.did);
-      await db.insert(member).values({ did: user.did }).onConflictDoNothing();
+      // The starter account shows up on lists once it has signed in itself.
+      if (starter.did !== user.did) await addFriend(user, starter.did, { starter: true });
+      await db.insert(member).values({ did: user.did, handle: user.handle }).onConflictDoNothing();
     });
   } catch (err) {
     console.error("Couldn't welcome new member", { did: user.did, err });

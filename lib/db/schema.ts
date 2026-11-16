@@ -54,6 +54,8 @@ export const member = pgTable("member", {
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
   /** When the member's existing photos were last copied into photo_index; null until then. */
   backfilledAt: timestamp("backfilled_at", { withTimezone: true }),
+  /** The member's verified handle as last seen, or null if unknown or invalid. */
+  handle: text("handle"),
 });
 
 /**

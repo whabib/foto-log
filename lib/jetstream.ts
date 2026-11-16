@@ -46,3 +46,9 @@ export function photoChange(event: unknown): PhotoChange | null {
   }
   return null;
 }
+
+/** The DID whose identity (handle or PDS) changed, for an identity event; null otherwise. */
+export function identityChange(event: unknown): string | null {
+  const e = event as JetstreamEvent | null;
+  return e?.kind === "identity" && typeof e.did === "string" ? e.did : null;
+}
