@@ -29,6 +29,13 @@
       "when": 1794782833320,
       "tag": "0003_member",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794795258715,
+      "tag": "0004_photo_index",
+      "breakpoints": true
     }
   ]
 }
