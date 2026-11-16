@@ -3,10 +3,13 @@ import { callbackErrorDetails, oauthErrorCode, parseSignInState } from "./client
 
 describe("parseSignInState", () => {
   it("reads the state we sent", () => {
-    expect(parseSignInState('{"input":"alice.bsky.social","fallback":false}')).toEqual({
-      input: "alice.bsky.social",
-      fallback: false,
-    });
+    expect(parseSignInState('{"input":"alice.bsky.social","tier":0}')).toEqual({ input: "alice.bsky.social", tier: 0 });
+    expect(parseSignInState('{"input":"alice.bsky.social","tier":2}')).toEqual({ input: "alice.bsky.social", tier: 2 });
+  });
+
+  it("reads state from sign-ins started before the permission set", () => {
+    expect(parseSignInState('{"input":"a","fallback":false}')).toEqual({ input: "a", tier: 1 });
+    expect(parseSignInState('{"input":"a","fallback":true}')).toEqual({ input: "a", tier: 2 });
   });
 
   it("ignores missing or malformed state", () => {
@@ -14,6 +17,9 @@ describe("parseSignInState", () => {
     expect(parseSignInState("")).toBeNull();
     expect(parseSignInState("not json")).toBeNull();
     expect(parseSignInState('{"input":1,"fallback":false}')).toBeNull();
+    expect(parseSignInState('{"input":"a","tier":3}')).toBeNull();
+    expect(parseSignInState('{"input":"a","tier":-1}')).toBeNull();
+    expect(parseSignInState('{"input":"a"}')).toBeNull();
   });
 });
 

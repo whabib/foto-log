@@ -6,7 +6,7 @@ import {
   type OAuthClientMetadataInput,
 } from "@atproto/oauth-client-node";
 import { baseUrl, isProduction, secret } from "@/lib/config";
-import { CLIENT_SCOPE, FALLBACK_SCOPE, GRANULAR_SCOPE } from "./scopes";
+import { CLIENT_SCOPE, SCOPE_TIERS } from "./scopes";
 import { requestLock, sessionStore, stateStore } from "./stores";
 
 export const CALLBACK_PATH = "/oauth/callback";
@@ -79,16 +79,22 @@ export function callbackErrorDetails(
   };
 }
 
-/** Carried through the OAuth round trip in the `state` parameter. */
-export type SignInState = { input: string; fallback: boolean };
+/** Carried through the OAuth round trip in the `state` parameter. `tier` indexes SCOPE_TIERS. */
+export type SignInState = { input: string; tier: number };
+
+export const LAST_TIER = SCOPE_TIERS.length - 1;
 
 export function parseSignInState(state: string | null | undefined): SignInState | null {
   if (!state) return null;
   try {
     const parsed = JSON.parse(state);
-    return typeof parsed?.input === "string" && typeof parsed?.fallback === "boolean"
-      ? parsed
-      : null;
+    if (typeof parsed?.input !== "string") return null;
+    if (Number.isInteger(parsed.tier) && parsed.tier >= 0 && parsed.tier <= LAST_TIER) {
+      return { input: parsed.input, tier: parsed.tier };
+    }
+    // Sign-ins started before the permission set: granular, then fallback.
+    if (typeof parsed.fallback === "boolean") return { input: parsed.input, tier: parsed.fallback ? 2 : 1 };
+    return null;
   } catch {
     return null;
   }
@@ -96,20 +102,20 @@ export function parseSignInState(state: string | null | undefined): SignInState 
 
 /**
  * Starts sign-in for a handle, DID or PDS URL and returns the URL to send
- * the browser to. Asks for granular scopes first and falls back to
- * `transition:generic` if the authorization server rejects them.
+ * the browser to. Asks for the best scopes first and moves down
+ * SCOPE_TIERS while the authorization server rejects them.
  */
-export async function startSignIn(input: string, fallback = false): Promise<URL> {
+export async function startSignIn(input: string, tier = 0): Promise<URL> {
   const client = await getOAuthClient();
-  const state: SignInState = { input, fallback };
+  const state: SignInState = { input, tier };
   try {
     return await client.authorize(input, {
-      scope: fallback ? FALLBACK_SCOPE : GRANULAR_SCOPE,
+      scope: SCOPE_TIERS[tier],
       state: JSON.stringify(state),
     });
   } catch (err) {
-    if (!fallback && oauthErrorCode(err) === "invalid_scope") {
-      return startSignIn(input, true);
+    if (tier < LAST_TIER && oauthErrorCode(err) === "invalid_scope") {
+      return startSignIn(input, tier + 1);
     }
     throw err;
   }
