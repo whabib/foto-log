@@ -109,8 +109,13 @@ export async function rememberHandle(did: string, handle: string | null): Promis
 /** Re-resolves a member's handle after Jetstream reports an identity change. */
 async function refreshHandle(did: string): Promise<void> {
   const actor = await resolveActor(did);
-  // Don't clear a handle because resolution failed for a moment.
-  if (actor) await rememberHandle(did, actor.handle);
+  if (actor) {
+    await rememberHandle(did, actor.handle);
+  } else {
+    // Keep the old handle, and queue a backfill, which resolves it again.
+    const db = await getDb();
+    await db.update(member).set({ backfilledAt: null }).where(eq(member.did, did));
+  }
 }
 
 /** How long sign-in waits for a new member's backfill; the indexer finishes it otherwise. */
