@@ -106,7 +106,8 @@ function NameClaim({ handle, disabled }: { handle: string | null; disabled?: boo
     <div className="field">
       <label htmlFor="fotologName">Fotolog name</label>
       <p className="hint">
-        Pick a one-word name to use on foto-log instead of {handle ? `@${handle}` : "your Bluesky handle"}. Use{" "}
+        You can optionally pick a one-word name to use on foto-log instead of{" "}
+        {handle ? <strong>@{handle}</strong> : "your Bluesky handle"}. Use{" "}
         {NAME_MIN} to {NAME_MAX} letters, numbers and underscores. You can only set it once.
       </p>
       <div className="name-row">
