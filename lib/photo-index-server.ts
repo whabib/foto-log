@@ -1,11 +1,11 @@
 import "server-only";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { getDb, withTryLock } from "@/lib/db";
 import { appState, member, photoIndex } from "@/lib/db/schema";
 import { resolveActor } from "@/lib/identity";
 import { DEFAULT_JETSTREAM_URL, eventTimeUs, jetstreamUrl, photoChange } from "@/lib/jetstream";
 import { assertValidPhotoRecord, type PhotoRecord } from "@/lib/photo-record";
-import { listPhotos } from "@/lib/photos/server";
+import { scanPhotos } from "@/lib/photos/server";
 
 const CURSOR_KEY = "jetstream_cursor";
 
@@ -21,7 +21,8 @@ export async function indexPhoto(did: string, rkey: string, cid: string, record:
     caption: record.caption ?? null,
     uploadDate: record.uploadDate,
     createdAt: new Date(record.createdAt),
-    indexedAt: new Date(),
+    // The database's clock, which backfill reconciliation compares against.
+    indexedAt: sql`now()`,
   };
   await db
     .insert(photoIndex)
@@ -49,33 +50,51 @@ async function applyPut(did: string, rkey: string, cid: string, json: unknown): 
   await indexPhoto(did, rkey, cid, record);
 }
 
-/** Most photos to copy per member in one backfill. */
-const MAX_BACKFILL_PHOTOS = 2000;
+/** Most listRecords pages (of 100) to read in one backfill: decades of daily photos. */
+const MAX_BACKFILL_PAGES = 200;
 
 /**
  * Copies a member's photos from their repo into the index, and drops index
  * rows for photos that are gone from it. Returns false if the repo couldn't
- * be read.
+ * be read; the member stays pending and is tried again later.
  */
 export async function backfillMember(did: string): Promise<boolean> {
   const actor = await resolveActor(did);
   if (!actor) return false;
-  const seen = new Set<string>();
-  let before: string | undefined;
-  while (seen.size < MAX_BACKFILL_PHOTOS) {
-    const page = await listPhotos(actor, { limit: 100, before });
-    for (const p of page) {
-      seen.add(p.rkey);
-      await indexPhoto(did, p.rkey, p.cid, p.record);
-    }
-    if (page.length < 100) break;
-    before = page[page.length - 1].rkey;
-  }
   const db = await getDb();
-  const indexed = await db.select({ rkey: photoIndex.rkey }).from(photoIndex).where(eq(photoIndex.did, did));
-  // Only reconcile when the whole repo fit, so a cap never deletes real photos.
-  if (seen.size < MAX_BACKFILL_PHOTOS) {
-    for (const { rkey } of indexed) if (!seen.has(rkey)) await unindexPhoto(did, rkey);
+  // Rows written after this (by a post, a delete or Jetstream while the scan
+  // runs) are newer than the scan, so reconciling leaves them alone.
+  const [{ scanStart }] = (
+    await db.execute<{ scanStart: string | Date }>(sql`SELECT now() AS "scanStart"`)
+  ).rows;
+  const seen = new Set<string>();
+  let complete: boolean;
+  try {
+    complete = await scanPhotos(actor, MAX_BACKFILL_PAGES, async (photos) => {
+      for (const p of photos) {
+        seen.add(p.rkey);
+        await indexPhoto(did, p.rkey, p.cid, p.record);
+      }
+    });
+  } catch (err) {
+    console.warn("Backfill couldn't read the repo", { did, err });
+    return false;
+  }
+  if (complete) {
+    const indexed = await db
+      .select({ rkey: photoIndex.rkey })
+      .from(photoIndex)
+      .where(and(eq(photoIndex.did, did), lt(photoIndex.indexedAt, new Date(scanStart))));
+    for (const { rkey } of indexed) {
+      if (!seen.has(rkey)) {
+        await db
+          .delete(photoIndex)
+          .where(and(eq(photoIndex.did, did), eq(photoIndex.rkey, rkey), lt(photoIndex.indexedAt, new Date(scanStart))));
+      }
+    }
+  } else {
+    // Only a repo far past one photo a day gets here: keep what was read, delete nothing.
+    console.warn("Backfill stopped at its page limit", { did, pages: MAX_BACKFILL_PAGES });
   }
   await db.update(member).set({ backfilledAt: new Date() }).where(eq(member.did, did));
   return true;
@@ -137,6 +156,8 @@ export async function recentPhotos(limit: number): Promise<IndexedPhoto[]> {
       FROM ${photoIndex} p
       JOIN ${member} m ON m.did = p.did
       WHERE p.created_at <= now() + interval '5 minutes'
+        -- Day pages show a day's -01 photo, so only those have a page to link to.
+        AND p.rkey LIKE '%-01'
       ORDER BY p.did, p.created_at DESC
     ) latest
     ORDER BY created_at DESC
@@ -155,12 +176,14 @@ export async function recentPhotos(limit: number): Promise<IndexedPhoto[]> {
 
 /** How long one catch-up may keep reading Jetstream. */
 const CATCH_UP_MS = 45_000;
-/** Stop when Jetstream has been quiet this long: with the photo filter, quiet means caught up. */
-const IDLE_MS = 5_000;
+/**
+ * Stop when Jetstream has been quiet this long. Account and identity events
+ * come through the photo filter too, so a healthy replay is never quiet for
+ * long; quiet means something stalled, and the next run retries from the cursor.
+ */
+const IDLE_MS = 10_000;
 /** How far back the first catch-up starts; older photos come from backfills. */
 const FIRST_CURSOR_LOOKBACK_US = 60 * 60 * 1_000_000;
-/** Overlap kept when stopping on quiet, in case replay was still running. Re-applying is harmless. */
-const IDLE_OVERLAP_US = 2 * 60 * 1_000_000;
 
 async function readCursor(): Promise<number | null> {
   const db = await getDb();
@@ -194,6 +217,8 @@ async function catchUp(): Promise<CatchUpResult> {
   let changes = 0;
   // Apply events one at a time, in order.
   let queue = Promise.resolve();
+  // The first failed write. Later events are skipped so the cursor stops before it.
+  let failed: { err: unknown } | undefined;
 
   const stoppedBy = await new Promise<CatchUpResult["stoppedBy"]>((resolve) => {
     let idle: ReturnType<typeof setTimeout> | undefined;
@@ -222,21 +247,28 @@ async function catchUp(): Promise<CatchUpResult> {
       events++;
       const t = eventTimeUs(event);
       const change = photoChange(event);
-      queue = queue.then(async () => {
-        if (change) {
-          changes++;
-          if (change.kind === "delete") await unindexPhoto(change.did, change.rkey);
-          else await applyPut(change.did, change.rkey, change.cid, change.record);
-        }
-        if (t !== null && t > cursor) cursor = t;
-      });
+      queue = queue
+        .then(async () => {
+          if (failed) return;
+          if (change) {
+            changes++;
+            if (change.kind === "delete") await unindexPhoto(change.did, change.rkey);
+            else await applyPut(change.did, change.rkey, change.cid, change.record);
+          }
+          if (t !== null && t > cursor) cursor = t;
+        })
+        .catch((err: unknown) => {
+          failed ??= { err };
+          finish("error");
+        });
       if (t !== null && t >= startUs) finish("caught-up");
     });
   });
 
   await queue;
-  if (stoppedBy === "quiet") cursor = Math.max(cursor, startUs - IDLE_OVERLAP_US);
+  // Saved only up to the last event applied, so the next run picks up from there.
   await writeCursor(cursor);
+  if (failed) throw failed.err;
   return { events, changes, cursor, stoppedBy };
 }
 
@@ -245,10 +277,12 @@ const BACKFILLS_PER_TICK = 5;
 
 async function backfillPending(): Promise<number> {
   const db = await getDb();
+  // In random order, so members whose repos can't be read don't hold up the rest.
   const pending = await db
     .select({ did: member.did })
     .from(member)
     .where(isNull(member.backfilledAt))
+    .orderBy(sql`random()`)
     .limit(BACKFILLS_PER_TICK);
   let done = 0;
   for (const { did } of pending) {

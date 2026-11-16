@@ -384,6 +384,47 @@ export async function listPhotos(
 }
 
 /**
+ * Reads `actor`'s photo collection one page of 100 at a time, newest first,
+ * calling `onPage` with each page's valid photos. Unlike listPhotos it throws
+ * if a page can't be read, so a caller never mistakes a failure for the end.
+ * Returns true if it reached the end, false if it stopped at `maxPages`.
+ */
+export async function scanPhotos(
+  actor: Actor,
+  maxPages: number,
+  onPage: (photos: StoredPhoto[]) => Promise<void>,
+): Promise<boolean> {
+  const { jsonToLex } = await import("@atproto/lexicon");
+  let cursor: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const url = new URL("/xrpc/com.atproto.repo.listRecords", actor.pds);
+    url.searchParams.set("repo", actor.did);
+    url.searchParams.set("collection", PHOTO_COLLECTION);
+    url.searchParams.set("limit", "100");
+    if (cursor) url.searchParams.set("cursor", cursor);
+    const res = await fetchFromPds(url);
+    if (!res.ok) throw new Error(`listRecords failed with ${res.status}`);
+    const body = (await res.json()) as { cursor?: string; records?: { uri: string; cid: string; value: unknown }[] };
+    const records = body.records ?? [];
+    const photos: StoredPhoto[] = [];
+    for (const r of records) {
+      const rkey = r.uri.split("/").pop() ?? "";
+      try {
+        const record = jsonToLex(r.value);
+        assertValidPhotoRecord(rkey, record);
+        photos.push({ uri: r.uri, cid: r.cid, rkey, record });
+      } catch {
+        // Not a valid photo: left out, so the index drops it too.
+      }
+    }
+    await onPage(photos);
+    if (records.length === 0 || !body.cursor || body.cursor === cursor) return true;
+    cursor = body.cursor;
+  }
+  return false;
+}
+
+/**
  * Up to `count` photos on each side of `rkey`: `older` newest first,
  * `newer` oldest first. The first of each is the prev/next photo.
  */
