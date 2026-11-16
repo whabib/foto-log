@@ -13,6 +13,8 @@ const STATUS: Record<PhotoError["code"], number> = {
   forbidden: 403,
   not_found: 404,
   already_posted: 409,
+  day_full: 409,
+  unavailable: 503,
 };
 
 function isField(v: unknown): v is ProfileImageField {

@@ -3,12 +3,14 @@ import { type CSSProperties, type ReactNode, Suspense } from "react";
 import LocalTime from "@/app/components/LocalTime";
 import FriendButton from "@/app/components/friends/FriendButton";
 import FriendsColumn from "@/app/components/friends/FriendsColumn";
+import GroupBox from "@/app/components/groups/GroupBox";
+import GroupsColumn from "@/app/components/groups/GroupsColumn";
 import Guestbook from "@/app/components/guestbook/Guestbook";
 import { EMPTY_GUESTBOOK, type Guestbook as GuestbookData } from "@/lib/guestbook/entries";
 import DeleteButton from "@/app/[actor]/[date]/DeleteButton";
+import type { GroupInfo } from "@/lib/member-page-data";
 import type { Member } from "@/lib/member-resolve-server";
 import { isHexColor, type MemberPageLook } from "@/lib/member-settings";
-import { parsePhotoRecordKey } from "@/lib/photo-record";
 import type { StoredPhoto } from "@/lib/photos/server";
 import type { MemberImages } from "@/lib/member-profile";
 import {
@@ -17,8 +19,9 @@ import {
   friendsPath,
   imageUrl,
   memberImageUrl,
+  type MemberRef,
   memberPath,
-  photoPath,
+  photoKeyPath,
   thumbnailUrl,
 } from "@/lib/photos/urls";
 
@@ -42,10 +45,9 @@ function formatShortDay(date: string) {
   });
 }
 
-/** The page of a stored photo. One photo a day for now, so that's its upload date's page. */
+/** The page of a stored photo: its day's page for the day's first, else its own key's (groups have several a day). */
 export function storedPhotoPath(owner: Member, photo: StoredPhoto): string {
-  const key = parsePhotoRecordKey(photo.rkey);
-  return photoPath(owner, key?.uploadDate ?? photo.record.uploadDate);
+  return photoKeyPath(owner, photo.rkey);
 }
 
 export type MemberPageProps = {
@@ -70,6 +72,12 @@ export type MemberPageProps = {
   canAdd?: boolean;
   /** The right column, which streams in. Pages that render statically can pass it in place of the live one. */
   friends?: ReactNode;
+  /** The right column's Groups, which streams in; static pages can pass their own. */
+  groups?: ReactNode;
+  /** When the owner is a group: its size and the viewer's membership. */
+  group?: GroupInfo | null;
+  /** On a group, the member who posted the center photo. */
+  uploader?: MemberRef | null;
 };
 
 export default function MemberPage(props: MemberPageProps) {
@@ -84,7 +92,16 @@ export default function MemberPage(props: MemberPageProps) {
               <CenterPhoto {...props} photo={photo} older={older} newer={newer} />
             ) : (
               <>
-                <NoPhotos isOwner={isOwner} />
+                <NoPhotos
+                  isOwner={isOwner}
+                  postHref={
+                    props.group && (isOwner || props.group.viewer === "member")
+                      ? `/post?group=${encodeURIComponent(owner.did)}`
+                      : isOwner
+                        ? "/post"
+                        : null
+                  }
+                />
                 {props.onViewerList != null && (
                   <FriendButton did={owner.did} onList={props.onViewerList} canAdd={props.canAdd} handle={owner.handle} />
                 )}
@@ -105,6 +122,16 @@ export default function MemberPage(props: MemberPageProps) {
               )}
               {look.location && <p className="location">{look.location}</p>}
             </div>
+            {props.group && (
+              <GroupBox
+                groupDid={owner.did}
+                members={props.group.members}
+                joinPolicy={props.group.joinPolicy}
+                viewer={props.group.viewer}
+                isOwner={isOwner}
+                signedIn={signedIn}
+              />
+            )}
 
             <h3 className="rail-heading">Recent Photos</h3>
             {recent.length > 0 ? (
@@ -138,7 +165,11 @@ export default function MemberPage(props: MemberPageProps) {
               </Suspense>
             )}
             <h3 className="rail-heading">Groups</h3>
-            <p className="rail-empty">Coming soon.</p>
+            {props.groups ?? (
+              <Suspense fallback={<p className="rail-empty">Loading groups…</p>}>
+                <GroupsColumn owner={owner} isOwner={isOwner} />
+              </Suspense>
+            )}
           </aside>
         </div>
     </MemberFrame>
@@ -226,6 +257,7 @@ function CenterPhoto({
   signBlocked,
   onViewerList,
   canAdd,
+  uploader,
 }: MemberPageProps & { photo: StoredPhoto }) {
   const { record } = photo;
   const bskyUrl = blueskyPostUrl(record.post.uri);
@@ -287,6 +319,12 @@ function CenterPhoto({
         </p>
         <p className="uploaded">
           Photo uploaded at <LocalTime iso={record.createdAt} format="time" />
+          {uploader && (
+            <>
+              {" by "}
+              <Link href={memberPath(uploader)}>{displayName(uploader)}</Link>
+            </>
+          )}
         </p>
       </div>
 
@@ -303,13 +341,13 @@ function CenterPhoto({
   );
 }
 
-function NoPhotos({ isOwner }: { isOwner: boolean }) {
+function NoPhotos({ isOwner, postHref }: { isOwner: boolean; postHref: string | null }) {
   return (
     <div className="no-photos">
       <p>No photos yet.</p>
-      {isOwner && (
+      {postHref && (
         <p>
-          <Link href="/post">Post your first photo</Link>
+          <Link href={postHref}>{isOwner ? "Post your first photo" : "Post the first photo"}</Link>
         </p>
       )}
     </div>

@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { timeAgo } from "@/lib/friends";
 import { resolveActor } from "@/lib/identity";
 import { recentPhotos } from "@/lib/photo-index-server";
-import { displayName, memberPath, photoPath, thumbnailUrl } from "@/lib/photos/urls";
+import { displayName, memberPath, photoKeyPath, thumbnailUrl } from "@/lib/photos/urls";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +53,7 @@ export default async function Home() {
             const name = displayName(owner);
             return (
               <li key={c.did}>
-                <Link href={photoPath(owner, c.uploadDate)} className="home-photo" aria-label={`${name}'s newest photo`}>
+                <Link href={photoKeyPath(owner, c.rkey)} className="home-photo" aria-label={`${name}'s newest photo`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={thumbnailUrl(c.did, c.imageCid)} alt={c.alt ?? ""} loading="lazy" />
                 </Link>

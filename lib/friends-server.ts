@@ -16,7 +16,7 @@ import {
 } from "@/lib/friends";
 import { type Actor, resolveActor } from "@/lib/identity";
 import { agentFor, PhotoError } from "@/lib/photos/server";
-import { photoPath, thumbnailUrl } from "@/lib/photos/urls";
+import { photoKeyPath, thumbnailUrl } from "@/lib/photos/urls";
 import { fetchFromPds } from "@/lib/safe-fetch";
 import { TtlCache } from "@/lib/ttl-cache";
 
@@ -111,7 +111,7 @@ export async function isOnList(viewerDid: string, did: string): Promise<boolean>
  * the member table and the photo index. DIDs that aren't foto-log members
  * are left out: they stay on the list and show up once they sign in.
  */
-async function memberRows(dids: string[]): Promise<FriendRow[]> {
+export async function memberRows(dids: string[]): Promise<FriendRow[]> {
   if (dids.length === 0) return [];
   const pool = await getPool();
   const { rows } = await pool.query<{
@@ -119,17 +119,16 @@ async function memberRows(dids: string[]): Promise<FriendRow[]> {
     handle: string | null;
     fotolog_name: string | null;
     show_fotolog_name: boolean;
+    rkey: string | null;
     image_cid: string | null;
     alt: string | null;
-    upload_date: string | null;
     created_at: Date | null;
   }>(
-    `SELECT m.did, m.handle, m.fotolog_name, m.show_fotolog_name, p.image_cid, p.alt, p.upload_date, p.created_at
+    `SELECT m.did, m.handle, m.fotolog_name, m.show_fotolog_name, p.rkey, p.image_cid, p.alt, p.created_at
      FROM member m
      LEFT JOIN LATERAL (
-       -- Day pages show a day's -01 photo, so only those have a page to link to.
-       SELECT image_cid, alt, upload_date, created_at FROM photo_index
-       WHERE did = m.did AND rkey LIKE '%-01' AND created_at <= now() + interval '5 minutes'
+       SELECT rkey, image_cid, alt, created_at FROM photo_index
+       WHERE did = m.did AND created_at <= now() + interval '5 minutes'
        ORDER BY created_at DESC LIMIT 1
      ) p ON true
      WHERE m.did = ANY($1::text[])`,
@@ -139,12 +138,12 @@ async function memberRows(dids: string[]): Promise<FriendRow[]> {
     const name = r.show_fotolog_name ? r.fotolog_name : null;
     const owner = { did: r.did, handle: r.handle, name };
     const latest: FriendCard | null =
-      r.image_cid && r.upload_date && r.created_at
+      r.image_cid && r.rkey && r.created_at
         ? {
             did: r.did,
             handle: r.handle,
             name,
-            path: photoPath(owner, r.upload_date),
+            path: photoKeyPath(owner, r.rkey),
             thumbnail: thumbnailUrl(r.did, r.image_cid),
             alt: r.alt ?? "",
             createdAt: r.created_at.toISOString(),

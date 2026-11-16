@@ -19,6 +19,7 @@ The lexicon declares the key type as `any`, so the key format is checked in code
 | `alt` | no | Alt text, up to 1000 graphemes. |
 | `aspectRatio` | no | `{ width, height }`, both integers ≥ 1. |
 | `caption` | no | Up to 300 graphemes (and 3000 bytes), the same as a Bluesky post. |
+| `uploadedBy` | no | A DID. On a group's fotolog, the member who posted the photo; the group's account writes the record. Absent when the account posted it itself. |
 | `uploadDate` | yes | `YYYY-MM-DD`, the day the photo was posted, in `timeZone`. The record key starts with it. |
 | `displayDate` | yes | `YYYY-MM-DD`, the day the photo is shown under. **Always equals `uploadDate` in v1.** Letting users choose it is deferred. |
 | `timeZone` | yes | IANA time zone name, e.g. `America/New_York`. |

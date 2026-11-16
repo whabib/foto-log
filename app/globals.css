@@ -1065,6 +1065,14 @@ body:has(.member-theme) .account-menu li button:hover {
   opacity: 0.5;
 }
 
+.settings-form button.link-button {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--accent);
+  font-weight: inherit;
+}
+
 .reset-form {
   margin-top: 16px;
 }
@@ -1558,4 +1566,61 @@ body:has(.member-theme) .account-menu li button:hover {
   background: var(--accent);
   color: var(--bg);
   cursor: pointer;
+}
+
+/* Groups */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.group-box {
+  margin: 0.75rem 0 1rem;
+  font-size: 0.85rem;
+}
+
+.group-box .group-kind {
+  margin: 0 0 0.25rem;
+  font-weight: bold;
+}
+
+.group-actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.group-actions li {
+  margin: 0.15rem 0;
+}
+
+.group-policy {
+  border: 0;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.group-list-heading {
+  margin: 0.75rem 0 0.25rem;
+  font-weight: bold;
+}
+
+.group-members {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.group-members li {
+  margin: 0.15rem 0;
+}
+
+.group-settings {
+  margin-top: 24px;
 }

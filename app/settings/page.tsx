@@ -14,6 +14,7 @@ import { resolveActor } from "@/lib/identity";
 import { memberImageUrl, memberPath } from "@/lib/photos/urls";
 import { memberName } from "@/lib/fotolog-name-server";
 import { currentIdentity } from "@/lib/photos/server";
+import { getGroup, groupMembers } from "@/lib/groups-server";
 import SettingsForm from "./SettingsForm";
 
 export const metadata: Metadata = { title: "Settings · foto-log" };
@@ -28,7 +29,10 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
     searchParams,
     resolveActor(user.did),
   ]);
-  const images = actor ? await getMemberImages(actor, { fresh: true }) : null;
+  const [images, group] = await Promise.all([
+    actor ? getMemberImages(actor, { fresh: true }) : null,
+    loadGroup(user.did),
+  ]);
   const s = saved ?? EMPTY_SETTINGS;
 
   return (
@@ -56,6 +60,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           countries={countryOptions()}
           hasSaved={saved !== null}
           memberPage={memberPath(identity)}
+          group={group ?? undefined}
           identity={{
             name: fotologName.name,
             handle: identity.handle,
@@ -74,4 +79,19 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
       </div>
     </main>
   );
+}
+
+/** The account's group settings and members, or null if they couldn't be loaded. */
+async function loadGroup(did: string) {
+  try {
+    const group = await getGroup(did);
+    const members = group ? await groupMembers(did) : [];
+    return {
+      joinPolicy: group?.joinPolicy ?? null,
+      members: members.map((m) => ({ did: m.did, handle: m.handle, name: m.name, status: m.status })),
+    };
+  } catch (err) {
+    console.warn("Couldn't load group settings", { did, err });
+    return null;
+  }
 }

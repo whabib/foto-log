@@ -168,6 +168,12 @@ describe("buildPhotoRecord", () => {
     expect(() => buildPhotoRecord(input({ sequence: 0 }))).toThrow(RangeError);
   });
 
+  it("credits the member who posted to a group", () => {
+    expect(buildPhotoRecord(input({ uploadedBy: "did:plc:alice" })).record.uploadedBy).toBe("did:plc:alice");
+    expect("uploadedBy" in buildPhotoRecord(input()).record).toBe(false);
+    expect(() => buildPhotoRecord(input({ uploadedBy: "not a did" }))).toThrow(/uploadedBy/);
+  });
+
   it("includes alt and aspectRatio when given, and omits empty optionals", () => {
     const { record } = buildPhotoRecord(
       input({ alt: "A pier at sunset", aspectRatio: { width: 4, height: 3 }, caption: "" }),

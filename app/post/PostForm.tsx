@@ -21,9 +21,17 @@ type Status =
   | { kind: "posting" }
   | { kind: "error"; message: string; signIn?: boolean };
 
-export default function PostForm({ maxCaption }: { maxCaption: number }) {
+export default function PostForm({
+  maxCaption,
+  group,
+}: {
+  maxCaption: number;
+  /** Posting to a group: its DID. */
+  group?: { did: string };
+}) {
   const router = useRouter();
   const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const groupDid = group?.did;
   const [status, setStatus] = useState<Status>({ kind: "checking" });
   const [photo, setPhoto] = useState<Prepared | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -34,16 +42,19 @@ export default function PostForm({ maxCaption }: { maxCaption: number }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/photos/today?tz=${encodeURIComponent(timeZone)}`)
-      .then((r) => (r.ok ? r.json() : { path: null }))
-      .then((d: { path: string | null }) => {
-        if (!cancelled) setStatus(d.path ? { kind: "already", path: d.path } : { kind: "ready" });
+    const groupParam = groupDid ? `&group=${encodeURIComponent(groupDid)}` : "";
+    fetch(`/api/photos/today?tz=${encodeURIComponent(timeZone)}${groupParam}`)
+      .then(async (r) => (r.ok || r.status === 403 ? r.json() : { path: null }))
+      .then((d: { path?: string | null; error?: string }) => {
+        if (cancelled) return;
+        if (d.error) setStatus({ kind: "error", message: d.error });
+        else setStatus(d.path ? { kind: "already", path: d.path } : { kind: "ready" });
       })
       .catch(() => !cancelled && setStatus({ kind: "ready" }));
     return () => {
       cancelled = true;
     };
-  }, [timeZone]);
+  }, [timeZone, groupDid]);
 
   useEffect(
     () => () => {
@@ -92,6 +103,7 @@ export default function PostForm({ maxCaption }: { maxCaption: number }) {
     form.set("caption", caption);
     form.set("alt", alt);
     form.set("timeZone", timeZone);
+    if (group) form.set("group", group.did);
     try {
       const res = await fetch("/api/photos", { method: "POST", body: form });
       const data = (await res.json().catch(() => ({}))) as { path?: string; error?: string; code?: string };
@@ -119,10 +131,13 @@ export default function PostForm({ maxCaption }: { maxCaption: number }) {
     return (
       <div className="notice">
         <p>
-          <strong>You&apos;ve already posted today.</strong> Come back tomorrow for your next photo.
+          <strong>
+            {group ? "You've already posted to this group today." : "You've already posted today."}
+          </strong>{" "}
+          Come back tomorrow for your next photo.
         </p>
         <p>
-          <Link href={status.path}>See today&apos;s photo</Link>
+          <Link href={status.path}>{group ? "See your photo in the group" : "See today's photo"}</Link>
         </p>
       </div>
     );
@@ -174,11 +189,11 @@ export default function PostForm({ maxCaption }: { maxCaption: number }) {
       )}
 
       <button type="submit" disabled={!canPost}>
-        {status.kind === "posting" ? "Posting…" : "Post today's photo"}
+        {status.kind === "posting" ? "Posting…" : group ? "Post to the group" : "Post today's photo"}
       </button>
       <p className="hint">
         Your photo is resized and its location data is removed before upload. It&apos;s also
-        posted to Bluesky with your caption and a link back here.
+        posted to Bluesky{group ? " by the group" : ""} with your caption and a link back here.
       </p>
     </form>
   );

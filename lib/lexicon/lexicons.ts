@@ -505,6 +505,12 @@ export const schemaDict = {
               maxLength: 3000,
               maxGraphemes: 300,
             },
+            uploadedBy: {
+              type: 'string',
+              format: 'did',
+              description:
+                "On a group's fotolog, the member who posted the photo. Absent when the account posted it itself.",
+            },
             uploadDate: {
               type: 'string',
               description:

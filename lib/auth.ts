@@ -6,6 +6,7 @@ import { isProduction } from "@/lib/config";
 import { randomId, sign, unsign } from "@/lib/crypto";
 import { getDb, withLock } from "@/lib/db";
 import { oauthSession, userSession } from "@/lib/db/schema";
+import { isGroup } from "@/lib/groups-server";
 import { getOAuthClient } from "@/lib/oauth/client";
 import { fetchFromPds } from "@/lib/safe-fetch";
 
@@ -256,6 +257,8 @@ async function revokeIfUnusedLocked(did: string): Promise<void> {
     .where(and(eq(userSession.did, did), live()))
     .limit(1);
   if (others.length > 0) return;
+  // Members post to a group with its stored tokens, so they stay after it signs out.
+  if (await isGroup(did)) return;
   const client = await getOAuthClient();
   await client.revoke(did).catch((err) => {
     console.warn("OAuth revoke failed", { did, err });
