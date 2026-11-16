@@ -233,7 +233,7 @@ export async function addFriend(user: CurrentUser, did: string): Promise<void> {
   if (list.length >= MAX_FRIENDS && !list.includes(did)) {
     throw new PhotoError(
       "invalid",
-      `Your Friends/Favorites is full. It can hold ${MAX_FRIENDS} members; remove someone to add another.`,
+      `Your Friends/Favorites is full. It can hold ${MAX_FRIENDS.toLocaleString("en-US")} members; remove someone to add another.`,
     );
   }
   const agent = await agentFor(user.did);
