@@ -6,7 +6,13 @@ describe("scopes", () => {
   const granular = new ScopePermissionsTransition(GRANULAR_SCOPE);
 
   it("lets foto-log write what it needs", () => {
-    for (const collection of ["com.foto-log.photo", "app.bsky.feed.post", "app.bsky.feed.threadgate"]) {
+    for (const collection of [
+      "com.foto-log.photo",
+      "com.foto-log.profile",
+      "com.foto-log.friend",
+      "app.bsky.feed.post",
+      "app.bsky.feed.threadgate",
+    ]) {
       for (const action of ["create", "update", "delete"] as const) {
         expect(granular.allowsRepo({ collection, action }), `${action} ${collection}`).toBe(true);
       }

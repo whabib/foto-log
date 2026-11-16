@@ -429,6 +429,35 @@ export const schemaDict = {
       },
     },
   },
+  ComFotoLogFriend: {
+    lexicon: 1,
+    id: 'com.foto-log.friend',
+    description:
+      "A member on another member's Friends/Favorites list on foto-log.com.",
+    defs: {
+      main: {
+        type: 'record',
+        description:
+          "One per friend. The record key is the friend's DID, so a member can only list someone once.",
+        key: 'any',
+        record: {
+          type: 'object',
+          required: ['subject', 'createdAt'],
+          properties: {
+            subject: {
+              type: 'string',
+              format: 'did',
+              description: 'The member on the list. Matches the record key.',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'datetime',
+            },
+          },
+        },
+      },
+    },
+  },
   ComFotoLogPhoto: {
     lexicon: 1,
     id: 'com.foto-log.photo',
@@ -623,6 +652,7 @@ export const ids = {
   ComAtprotoRepoListRecords: 'com.atproto.repo.listRecords',
   ComAtprotoRepoPutRecord: 'com.atproto.repo.putRecord',
   ComAtprotoRepoStrongRef: 'com.atproto.repo.strongRef',
+  ComFotoLogFriend: 'com.foto-log.friend',
   ComFotoLogPhoto: 'com.foto-log.photo',
   ComFotoLogProfile: 'com.foto-log.profile',
 } as const

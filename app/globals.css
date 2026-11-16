@@ -583,6 +583,48 @@ body:has(.member-theme) .account-menu li button:hover {
   opacity: 0.8;
 }
 
+.friend-toggle {
+  margin: -8px 0 16px;
+  font-size: 0.875rem;
+}
+
+.member-theme .friend-toggle .link-button {
+  font-weight: 600;
+}
+
+/* The same size as the Recent Photos thumbnails, which fill the 150px left column. */
+.friend-cards {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 150px);
+  gap: 12px;
+}
+
+.friend-cards li {
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.friend-cards .friend-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.friend-cards .friend-when {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.75;
+}
+
+.friend-cards .friend-name {
+  display: block;
+  font-weight: 600;
+}
+
 .member-theme .owner-actions {
   margin-top: 16px;
 }
@@ -727,7 +769,8 @@ body:has(.member-theme) .account-menu li button:hover {
     grid-template-areas: "center" "left" "right";
   }
 
-  .recent-photos {
+  .recent-photos,
+  .friend-cards {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 

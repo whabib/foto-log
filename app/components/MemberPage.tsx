@@ -1,7 +1,9 @@
 import Link from "next/link";
-import type { CSSProperties } from "react";
+import { type CSSProperties, type ReactNode, Suspense } from "react";
 import LocalTime from "@/app/components/LocalTime";
 import ShareButton from "@/app/components/ShareButton";
+import FriendButton from "@/app/components/friends/FriendButton";
+import FriendsColumn from "@/app/components/friends/FriendsColumn";
 import Guestbook from "@/app/components/guestbook/Guestbook";
 import { EMPTY_GUESTBOOK, type Guestbook as GuestbookData } from "@/lib/guestbook/entries";
 import DeleteButton from "@/app/[actor]/[date]/DeleteButton";
@@ -55,6 +57,10 @@ export type MemberPageProps = {
   isOwner: boolean;
   signBlocked?: string | null;
   signedIn: boolean;
+  /** Whether the owner is on the signed-in viewer's Friends/Favorites; null when there's no toggle to show. */
+  onViewerList?: boolean | null;
+  /** The right column, which streams in. Pages that render statically can pass it in place of the live one. */
+  friends?: ReactNode;
 };
 
 export default function MemberPage(props: MemberPageProps) {
@@ -103,7 +109,14 @@ export default function MemberPage(props: MemberPageProps) {
 
         <div className="member-cols">
           <main className="member-center">
-            {photo ? <CenterPhoto {...props} photo={photo} older={older} newer={newer} /> : <NoPhotos isOwner={isOwner} />}
+            {photo ? (
+              <CenterPhoto {...props} photo={photo} older={older} newer={newer} />
+            ) : (
+              <>
+                <NoPhotos isOwner={isOwner} />
+                {props.onViewerList != null && <FriendButton did={owner.did} onList={props.onViewerList} />}
+              </>
+            )}
           </main>
 
           <aside className="member-left">
@@ -144,7 +157,11 @@ export default function MemberPage(props: MemberPageProps) {
 
           <aside className="member-right">
             <h3 className="rail-heading">Friends/Favorites</h3>
-            <p className="rail-empty">Coming soon.</p>
+            {props.friends ?? (
+              <Suspense fallback={<p className="rail-empty">Loading friends&rsquo; photos…</p>}>
+                <FriendsColumn owner={owner} isOwner={isOwner} />
+              </Suspense>
+            )}
             <h3 className="rail-heading">Groups</h3>
             <p className="rail-empty">Coming soon.</p>
           </aside>
@@ -168,6 +185,7 @@ function CenterPhoto({
   guestbook,
   signedIn,
   signBlocked,
+  onViewerList,
 }: MemberPageProps & { photo: StoredPhoto }) {
   const { record } = photo;
   const bskyUrl = blueskyPostUrl(record.post.uri);
@@ -216,6 +234,7 @@ function CenterPhoto({
         {" | "}
         <ShareButton url={`${baseUrl}${permalink}`} title={record.caption ?? formatDay(record.displayDate)} />
       </p>
+      {onViewerList != null && <FriendButton did={owner.did} onList={onViewerList} />}
 
       <div className="photo-text">
         {record.caption && <h2 className="caption">{record.caption}</h2>}
