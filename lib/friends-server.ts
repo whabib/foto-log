@@ -6,6 +6,7 @@ import { member } from "@/lib/db/schema";
 import {
   FRIEND_CARDS,
   FRIEND_COLLECTION,
+  MAX_FRIENDS,
   type FriendCard,
   friendFromRecord,
   type FriendRow,
@@ -19,11 +20,13 @@ import { photoPath, thumbnailUrl } from "@/lib/photos/urls";
 import { fetchFromPds } from "@/lib/safe-fetch";
 import { TtlCache } from "@/lib/ttl-cache";
 
-/** Most listRecords pages (of 100) to read for one list. */
-const MAX_LIST_PAGES = 10;
+/** listRecords pages (of 100) to read for one list: enough for a full one. */
+const MAX_LIST_PAGES = Math.ceil(MAX_FRIENDS / 100);
 /** Most friends whose newest photo is read for the right column. */
 const MAX_CARD_LOOKUPS = 200;
 const LOOKUP_CONCURRENCY = 16;
+/** How long the full list waits for friends' photos before showing what it has. */
+const FULL_LIST_DEADLINE_MS = 6000;
 
 // A member's own changes clear their entry.
 const listCache = new TtlCache<string, string[]>(60_000, 5000);
@@ -134,24 +137,40 @@ async function friendRow(did: string): Promise<FriendRow> {
 }
 
 /** Runs `fn` over `items`, at most `limit` at a time. */
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let next = 0;
   const worker = async () => {
     while (next < items.length) {
       const i = next++;
-      results[i] = await fn(items[i]);
+      results[i] = await fn(items[i], i);
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return results;
 }
 
-/** Each friend on `dids` with their newest photo, read from their own PDS until the index (#6) can answer this. */
-async function friendRows(dids: string[]): Promise<FriendRow[]> {
-  return mapLimit(dids, LOOKUP_CONCURRENCY, (did) =>
-    friendRow(did).catch(() => ({ did, handle: null, latest: null })),
-  );
+/**
+ * Each friend on `dids` with their newest photo, read from their own PDS
+ * until the index (#6) can answer this. With `deadlineMs`, friends not read
+ * by then come back without a handle or photo; their lookups carry on and
+ * fill the cache for the next view.
+ */
+async function friendRows(dids: string[], deadlineMs?: number): Promise<FriendRow[]> {
+  const done: (FriendRow | undefined)[] = new Array(dids.length);
+  const all = mapLimit(dids, LOOKUP_CONCURRENCY, async (did, i) => {
+    const row = await friendRow(did).catch(() => ({ did, handle: null, latest: null }));
+    done[i] = row;
+    return row;
+  });
+  if (deadlineMs === undefined) return all;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), deadlineMs);
+  });
+  const rows = await Promise.race([all, timeout]);
+  clearTimeout(timer);
+  return rows ?? dids.map((did, i) => done[i] ?? { did, handle: null, latest: null });
 }
 
 /**
@@ -168,7 +187,7 @@ export async function friendCards(owner: Actor, count = FRIEND_CARDS): Promise<F
 
 /** Everyone on `owner`'s list, with their newest photos, for the full Friends/Favorites page. */
 export async function allFriends(owner: Actor): Promise<FriendRow[]> {
-  return friendRows(await listFriends(owner));
+  return friendRows(await listFriends(owner), FULL_LIST_DEADLINE_MS);
 }
 
 function errorName(err: unknown): string | undefined {
@@ -209,6 +228,14 @@ async function writeList(user: CurrentUser, did: string, write: () => Promise<vo
 /** Adds `did` to `user`'s Friends/Favorites. Adding someone already on the list does nothing. */
 export async function addFriend(user: CurrentUser, did: string): Promise<void> {
   const rkey = checkFriend(user, did);
+  const self = await resolveActor(user.did);
+  const list = self ? await listFriends(self, { fresh: true }) : [];
+  if (list.length >= MAX_FRIENDS && !list.includes(did)) {
+    throw new PhotoError(
+      "invalid",
+      `Your Friends/Favorites is full. It can hold ${MAX_FRIENDS} members; remove someone to add another.`,
+    );
+  }
   const agent = await agentFor(user.did);
   await writeList(user, did, async () => {
     try {

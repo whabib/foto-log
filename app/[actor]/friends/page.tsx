@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import FriendsList from "@/app/components/friends/FriendsList";
 import { MemberFrame } from "@/app/components/MemberPage";
 import { getCurrentUser } from "@/lib/auth";
-import { parseFriendSort } from "@/lib/friends";
+import { type FriendSort, parseFriendSort } from "@/lib/friends";
 import { allFriends } from "@/lib/friends-server";
-import { resolveActor } from "@/lib/identity";
+import { type Actor, resolveActor } from "@/lib/identity";
 import { getMemberImages } from "@/lib/member-profile-server";
 import { memberPageLook } from "@/lib/member-settings";
 import { getMemberSettings } from "@/lib/member-settings-server";
@@ -29,18 +30,26 @@ export default async function FriendsPage({ params, searchParams }: Props) {
   const owner = await loadOwner((await params).actor);
   if (!owner) notFound();
   const sort = parseFriendSort((await searchParams).sort);
-  const [rows, settings, images, user] = await Promise.all([
-    allFriends(owner),
+  const [settings, images, user] = await Promise.all([
     getMemberSettings(owner.did),
     getMemberImages(owner),
     getCurrentUser(),
   ]);
+  const isOwner = user?.did === owner.did;
+  return (
+    <MemberFrame owner={owner} look={memberPageLook(settings, owner)} images={images} signedIn={user !== null}>
+      {/* Reading every friend's newest photo can take a while, so the list streams in. */}
+      <Suspense key={sort} fallback={<p className="friends-page rail-empty">Loading Friends/Favorites…</p>}>
+        <LoadedFriendsList owner={owner} sort={sort} isOwner={isOwner} />
+      </Suspense>
+    </MemberFrame>
+  );
+}
+
+async function LoadedFriendsList({ owner, sort, isOwner }: { owner: Actor; sort: FriendSort; isOwner: boolean }) {
+  const rows = await allFriends(owner);
   // A server component renders once per request, so reading the clock here is fine.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
-  return (
-    <MemberFrame owner={owner} look={memberPageLook(settings, owner)} images={images} signedIn={user !== null}>
-      <FriendsList owner={owner} rows={rows} sort={sort} isOwner={user?.did === owner.did} now={now} />
-    </MemberFrame>
-  );
+  return <FriendsList owner={owner} rows={rows} sort={sort} isOwner={isOwner} now={now} />;
 }
