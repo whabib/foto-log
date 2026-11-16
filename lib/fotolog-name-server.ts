@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { cache } from "react";
 import { getDb } from "@/lib/db";
 import { member } from "@/lib/db/schema";
@@ -20,6 +20,18 @@ export const memberName = cache(async (did: string): Promise<{ name: string | nu
 export async function primaryName(did: string): Promise<string | null> {
   const { name, primary } = await memberName(did);
   return primary ? name : null;
+}
+
+/** The primary Fotolog names of those among `dids` who show one, by DID. */
+export async function primaryNames(dids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(dids)];
+  if (unique.length === 0) return new Map();
+  const db = await getDb();
+  const rows = await db
+    .select({ did: member.did, name: member.fotologName, show: member.showFotologName })
+    .from(member)
+    .where(inArray(member.did, unique));
+  return new Map(rows.flatMap((r) => (r.name && r.show ? [[r.did, r.name] as const] : [])));
 }
 
 /** The DID that holds `name` (already normalized), or null. */

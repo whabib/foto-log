@@ -7,7 +7,7 @@ import {
   type GuestbookEntry,
   WHO_CAN_SIGN_LABELS,
 } from "@/lib/guestbook/entries";
-import { memberPath } from "@/lib/photos/urls";
+import { displayName, memberPath } from "@/lib/photos/urls";
 import HideButton from "./HideButton";
 import SignForm from "./SignForm";
 import CommentSettings from "./CommentSettings";
@@ -81,7 +81,7 @@ export default function Guestbook({
             )}
             <div className="entry-body">
               <p className="byline">
-                <Link href={memberPath({ did: e.author.did, handle: e.author.handle })}>{e.author.handle}</Link>{" "}
+                <Link href={memberPath(e.author)}>{displayName(e.author)}</Link>{" "}
                 <span className="said">
                   said on <LocalTime iso={e.createdAt} />
                 </span>

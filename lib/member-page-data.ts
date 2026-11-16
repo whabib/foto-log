@@ -2,7 +2,9 @@ import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { blueskyAvatar } from "@/lib/bsky-profile";
+import { primaryNames } from "@/lib/fotolog-name-server";
 import { isMember, isOnList } from "@/lib/friends-server";
+import type { Guestbook } from "@/lib/guestbook/entries";
 import { getGuestbook, mayReply, notAllowedMessage } from "@/lib/guestbook/server";
 import { memberPageLook } from "@/lib/member-settings";
 import { resolveMemberPage } from "@/lib/member-resolve-server";
@@ -56,7 +58,7 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
   const onList = user && user.did !== owner.did ? isOnList(user.did, owner.did) : null;
   // Only members can be added; anyone else gets an invite instead.
   const ownerIsMember = onList ? isMember(owner.did) : null;
-  const guestbook = photo ? await getGuestbook(owner.did, photo.record.post.uri) : null;
+  const guestbook = photo ? await withAuthorNames(await getGuestbook(owner.did, photo.record.post.uri)) : null;
   // Why the viewer can't sign an open guestbook, if they can't.
   const signBlocked =
     guestbook && user && !guestbook.closed && !(await mayReply(guestbook, owner.did, user.did))
@@ -83,3 +85,19 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     signBlocked,
   };
 });
+
+/** Adds each guestbook author's primary Fotolog name, without touching the cached entries. */
+async function withAuthorNames(guestbook: Guestbook): Promise<Guestbook> {
+  if (guestbook.entries.length === 0) return guestbook;
+  const names = await primaryNames(guestbook.entries.map((e) => e.author.did)).catch((err) => {
+    console.warn("Couldn't load guestbook names", { err });
+    return new Map<string, string>();
+  });
+  if (names.size === 0) return guestbook;
+  return {
+    ...guestbook,
+    entries: guestbook.entries.map((e) =>
+      names.has(e.author.did) ? { ...e, author: { ...e.author, name: names.get(e.author.did) } } : e,
+    ),
+  };
+}

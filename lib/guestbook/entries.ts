@@ -6,7 +6,14 @@ export const MAX_ENTRY_GRAPHEMES = 300;
 export type GuestbookEntry = {
   uri: string;
   cid: string;
-  author: { did: string; handle: string; displayName: string | null; avatar: string | null };
+  author: {
+    did: string;
+    handle: string;
+    displayName: string | null;
+    avatar: string | null;
+    /** Their Fotolog name when it's their primary name; added when a page shows the entry. */
+    name?: string | null;
+  };
   text: string;
   facets: unknown[] | undefined;
   createdAt: string;
