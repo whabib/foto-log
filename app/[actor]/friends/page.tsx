@@ -6,23 +6,22 @@ import { MemberFrame } from "@/app/components/MemberPage";
 import { getCurrentUser } from "@/lib/auth";
 import { type FriendSort, parseFriendSort } from "@/lib/friends";
 import { allFriends } from "@/lib/friends-server";
-import { type Actor, resolveActor } from "@/lib/identity";
+import { type Member, resolveMemberPage } from "@/lib/member-resolve-server";
 import { getMemberImages } from "@/lib/member-profile-server";
 import { memberPageLook } from "@/lib/member-settings";
 import { getMemberSettings } from "@/lib/member-settings-server";
-import { parseActorParam } from "@/lib/photos/urls";
+import { displayName } from "@/lib/photos/urls";
 
 type Props = { params: Promise<{ actor: string }>; searchParams: Promise<{ sort?: string | string[] }> };
 
-async function loadOwner(actorParam: string) {
-  const id = parseActorParam(actorParam);
-  return id ? resolveActor(id) : null;
+function loadOwner(actorParam: string) {
+  return resolveMemberPage(actorParam, "/friends");
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const owner = await loadOwner((await params).actor);
   if (!owner) return { title: "Member not found · foto-log" };
-  return { title: `${owner.handle ?? owner.did}'s Friends/Favorites · foto-log` };
+  return { title: `${displayName(owner)}'s Friends/Favorites · foto-log` };
 }
 
 /** Everyone on a member's Friends/Favorites, sorted by handle or by newest photo. */
@@ -46,7 +45,7 @@ export default async function FriendsPage({ params, searchParams }: Props) {
   );
 }
 
-async function LoadedFriendsList({ owner, sort, isOwner }: { owner: Actor; sort: FriendSort; isOwner: boolean }) {
+async function LoadedFriendsList({ owner, sort, isOwner }: { owner: Member; sort: FriendSort; isOwner: boolean }) {
   const rows = await allFriends(owner);
   // A server component renders once per request, so reading the clock here is fine.
   // eslint-disable-next-line react-hooks/purity

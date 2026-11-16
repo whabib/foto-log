@@ -158,7 +158,7 @@ export type IndexedPhoto = {
  * The newest photo of each of the `limit` members who posted most recently,
  * newest first. Only members who have signed in to foto-log are listed.
  */
-export async function recentPhotos(limit: number): Promise<IndexedPhoto[]> {
+export async function recentPhotos(limit: number): Promise<(IndexedPhoto & { name: string | null })[]> {
   const db = await getDb();
   const { rows } = await db.execute<{
     did: string;
@@ -168,9 +168,11 @@ export async function recentPhotos(limit: number): Promise<IndexedPhoto[]> {
     caption: string | null;
     upload_date: string;
     created_at: string | Date;
+    name: string | null;
   }>(sql`
     SELECT * FROM (
-      SELECT DISTINCT ON (p.did) p.did, p.rkey, p.image_cid, p.alt, p.caption, p.upload_date, p.created_at
+      SELECT DISTINCT ON (p.did) p.did, p.rkey,
+        CASE WHEN m.show_fotolog_name THEN m.fotolog_name END AS name, p.image_cid, p.alt, p.caption, p.upload_date, p.created_at
       FROM ${photoIndex} p
       JOIN ${member} m ON m.did = p.did
       WHERE p.created_at <= now() + interval '5 minutes'
@@ -189,6 +191,7 @@ export async function recentPhotos(limit: number): Promise<IndexedPhoto[]> {
     caption: r.caption,
     uploadDate: r.upload_date,
     createdAt: new Date(r.created_at),
+    name: r.name,
   }));
 }
 

@@ -117,12 +117,14 @@ async function memberRows(dids: string[]): Promise<FriendRow[]> {
   const { rows } = await pool.query<{
     did: string;
     handle: string | null;
+    fotolog_name: string | null;
+    show_fotolog_name: boolean;
     image_cid: string | null;
     alt: string | null;
     upload_date: string | null;
     created_at: Date | null;
   }>(
-    `SELECT m.did, m.handle, p.image_cid, p.alt, p.upload_date, p.created_at
+    `SELECT m.did, m.handle, m.fotolog_name, m.show_fotolog_name, p.image_cid, p.alt, p.upload_date, p.created_at
      FROM member m
      LEFT JOIN LATERAL (
        -- Day pages show a day's -01 photo, so only those have a page to link to.
@@ -134,19 +136,21 @@ async function memberRows(dids: string[]): Promise<FriendRow[]> {
     [dids],
   );
   return rows.map((r) => {
-    const owner = { did: r.did, handle: r.handle };
+    const name = r.show_fotolog_name ? r.fotolog_name : null;
+    const owner = { did: r.did, handle: r.handle, name };
     const latest: FriendCard | null =
       r.image_cid && r.upload_date && r.created_at
         ? {
             did: r.did,
             handle: r.handle,
+            name,
             path: photoPath(owner, r.upload_date),
             thumbnail: thumbnailUrl(r.did, r.image_cid),
             alt: r.alt ?? "",
             createdAt: r.created_at.toISOString(),
           }
         : null;
-    return { did: r.did, handle: r.handle, latest };
+    return { did: r.did, handle: r.handle, name, latest };
   });
 }
 

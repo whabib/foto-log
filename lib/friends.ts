@@ -36,6 +36,8 @@ export function friendFromRecord(rkey: string, record: unknown): string | null {
 export type FriendCard = {
   did: string;
   handle: string | null;
+  /** Their Fotolog name, when it's their primary name. */
+  name?: string | null;
   path: string;
   thumbnail: string;
   alt: string;
@@ -43,7 +45,7 @@ export type FriendCard = {
 };
 
 /** One row of the full Friends/Favorites page: the friend, and their newest photo if they have one. */
-export type FriendRow = { did: string; handle: string | null; latest: FriendCard | null };
+export type FriendRow = { did: string; handle: string | null; name?: string | null; latest: FriendCard | null };
 
 export type FriendSort = "handle" | "recent";
 
@@ -57,8 +59,10 @@ export function parseFriendSort(value: unknown): FriendSort {
  */
 export function sortFriends(rows: FriendRow[], sort: FriendSort): FriendRow[] {
   const byName = (a: FriendRow, b: FriendRow) => {
-    if (a.handle && b.handle) return a.handle.localeCompare(b.handle);
-    if (a.handle || b.handle) return a.handle ? -1 : 1;
+    const an = a.name ?? a.handle;
+    const bn = b.name ?? b.handle;
+    if (an && bn) return an.localeCompare(bn);
+    if (an || bn) return an ? -1 : 1;
     return a.did.localeCompare(b.did);
   };
   const time = (r: FriendRow) => {

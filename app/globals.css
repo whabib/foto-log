@@ -1340,3 +1340,48 @@ body:has(.member-theme) .account-menu li button:hover {
   padding: 0;
   min-width: 0;
 }
+
+/* Settings sections: Profile, then Member Page Customization. */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-section + .settings-section {
+  border-top: 1px solid var(--border);
+  padding-top: 28px;
+  margin-top: 12px;
+}
+
+.settings-section h2 + .muted {
+  margin: -16px 0 0;
+}
+
+.name-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-form .name-row button {
+  flex: none;
+}
+
+.fotolog-name {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.settings-form label.radio {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 400;
+  margin-top: 0;
+}
+
+#fotologName-status:empty {
+  display: none;
+}

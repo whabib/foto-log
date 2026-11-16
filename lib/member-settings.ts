@@ -39,9 +39,9 @@ export function isHexColor(value: string): boolean {
   return HEX_RE.test(value);
 }
 
-/** "alice.bsky.social's Fotolog" */
-export function defaultTitle(member: { handle: string | null; did: string }): string {
-  return `${member.handle ?? member.did}'s Fotolog`;
+/** "alice.bsky.social's Fotolog", or "alice's Fotolog" with a Fotolog name. */
+export function defaultTitle(member: { handle: string | null; did: string; name?: string | null }): string {
+  return `${member.name ?? member.handle ?? member.did}'s Fotolog`;
 }
 
 /**
@@ -121,7 +121,7 @@ export type MemberPageLook = {
 
 export function memberPageLook(
   settings: MemberSettings | null,
-  member: { handle: string | null; did: string },
+  member: { handle: string | null; did: string; name?: string | null },
 ): MemberPageLook {
   const s = settings ?? EMPTY_SETTINGS;
   return {

@@ -4,14 +4,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { blueskyAvatar } from "@/lib/bsky-profile";
 import { isMember, isOnList } from "@/lib/friends-server";
 import { getGuestbook, mayReply, notAllowedMessage } from "@/lib/guestbook/server";
-import { resolveActor } from "@/lib/identity";
 import { memberPageLook } from "@/lib/member-settings";
+import { resolveMemberPage } from "@/lib/member-resolve-server";
 import { getMemberImages } from "@/lib/member-profile-server";
 import { getMemberSettings } from "@/lib/member-settings-server";
 import { isValidDateKey, photoRecordKey } from "@/lib/photo-record";
 import { railWindow } from "@/lib/photos/rail";
 import { fetchPhoto, listPhotos, photoNeighbors, type StoredPhoto } from "@/lib/photos/server";
-import { parseActorParam } from "@/lib/photos/urls";
 
 export const RECENT_PHOTOS = 6;
 
@@ -22,10 +21,8 @@ export const RECENT_PHOTOS = 6;
  * share one load.
  */
 export const loadMemberPage = cache(async (actorParam: string, date?: string) => {
-  const id = parseActorParam(actorParam);
-  if (!id) return null;
   if (date !== undefined && !isValidDateKey(date)) return null;
-  const owner = await resolveActor(id);
+  const owner = await resolveMemberPage(actorParam, date ? `/${date}` : "");
   if (!owner) return null;
 
   const [recent, dayPhoto, settings, avatar, user, images] = await Promise.all([

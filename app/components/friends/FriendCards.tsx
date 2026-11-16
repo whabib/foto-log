@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type FriendCard, timeAgo } from "@/lib/friends";
-import { memberPath } from "@/lib/photos/urls";
+import { displayName, memberPath } from "@/lib/photos/urls";
 
 /** The right column's cards: each friend's newest photo, handle and how long ago. */
 export function FriendCardList({ cards, now, isOwner }: { cards: FriendCard[]; now: number; isOwner: boolean }) {
@@ -14,7 +14,7 @@ export function FriendCardList({ cards, now, isOwner }: { cards: FriendCard[]; n
   return (
     <ul className="friend-cards">
       {cards.map((c) => {
-        const name = c.handle ?? c.did;
+        const name = displayName(c);
         return (
           <li key={c.did}>
             <Link href={c.path} className="friend-photo" aria-label={`${name}'s newest photo`}>

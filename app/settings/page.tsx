@@ -12,6 +12,7 @@ import { getMemberImages } from "@/lib/member-profile-server";
 import { getMemberSettings } from "@/lib/member-settings-server";
 import { resolveActor } from "@/lib/identity";
 import { memberImageUrl, memberPath } from "@/lib/photos/urls";
+import { memberName } from "@/lib/fotolog-name-server";
 import { currentIdentity } from "@/lib/photos/server";
 import SettingsForm from "./SettingsForm";
 
@@ -20,8 +21,9 @@ export const metadata: Metadata = { title: "Settings · foto-log" };
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const [identity, saved, { reset }, actor] = await Promise.all([
+  const [identity, fotologName, saved, { reset }, actor] = await Promise.all([
     currentIdentity(user),
+    memberName(user.did),
     getMemberSettings(user.did),
     searchParams,
     resolveActor(user.did),
@@ -32,9 +34,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   return (
     <main className="settings-page">
       <h1>Settings</h1>
-      <section>
-        <h2>Customize your member page</h2>
-        <p className="muted">How your Fotolog looks to everyone who visits it.</p>
+      <div>
         {reset && <p className="notice-inline">Your member page is back to the defaults.</p>}
         <SettingsForm
           // The form keeps its own state, so remount it after a reset.
@@ -56,6 +56,11 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           countries={countryOptions()}
           hasSaved={saved !== null}
           memberPage={memberPath(identity)}
+          identity={{
+            name: fotologName.name,
+            handle: identity.handle,
+            primary: fotologName.primary ? "fotolog" : "bluesky",
+          }}
           images={
             images
               ? {
@@ -66,7 +71,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               : undefined
           }
         />
-      </section>
+      </div>
     </main>
   );
 }

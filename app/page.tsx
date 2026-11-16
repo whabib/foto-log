@@ -2,15 +2,15 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { timeAgo } from "@/lib/friends";
 import { resolveActor } from "@/lib/identity";
-import { type IndexedPhoto, recentPhotos } from "@/lib/photo-index-server";
-import { memberPath, photoPath, thumbnailUrl } from "@/lib/photos/urls";
+import { recentPhotos } from "@/lib/photo-index-server";
+import { displayName, memberPath, photoPath, thumbnailUrl } from "@/lib/photos/urls";
 
 export const dynamic = "force-dynamic";
 
 /** How many members' newest photos the home page shows. */
 const HOME_PHOTOS = 30;
 
-type Card = IndexedPhoto & { handle: string | null };
+type Card = Awaited<ReturnType<typeof recentPhotos>>[number] & { handle: string | null };
 
 async function loadCards(): Promise<Card[]> {
   try {
@@ -49,8 +49,8 @@ export default async function Home() {
       ) : (
         <ul className="home-photos">
           {cards.map((c) => {
-            const owner = { did: c.did, handle: c.handle };
-            const name = c.handle ?? c.did;
+            const owner = { did: c.did, handle: c.handle, name: c.name };
+            const name = displayName(owner);
             return (
               <li key={c.did}>
                 <Link href={photoPath(owner, c.uploadDate)} className="home-photo" aria-label={`${name}'s newest photo`}>
