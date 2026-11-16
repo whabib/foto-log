@@ -25,11 +25,6 @@ export async function signIn(formData: FormData) {
   redirect(url.toString());
 }
 
-export async function signOut() {
-  await endUserSession();
-  redirect("/");
-}
-
 /**
  * Signs the current member in again, so they can grant permissions added
  * since they last signed in. Ends this session first, since /login sends

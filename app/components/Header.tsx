@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
-import { signOut } from "@/app/login/actions";
 import AccountMenu from "@/app/components/AccountMenu";
 import { currentIdentity } from "@/lib/photos/server";
 import { memberPath } from "@/lib/photos/urls";
@@ -21,7 +20,6 @@ export default async function Header() {
           <AccountMenu
             label={identity.handle ? `@${identity.handle}` : user.did}
             myPage={memberPath(identity)}
-            signOut={signOut}
           />
         </div>
       ) : (
