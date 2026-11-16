@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "lex:gen": "lex gen-api --yes lib/lexicon $(find lexicons -name \"*.json\" | sort) && node scripts/fix-lexicon-imports.mjs",
+    "lex:gen": "lex gen-api --yes lib/lexicon $(find lexicons -name \"*.json\" ! -name \"auth*.json\" | sort) && node scripts/fix-lexicon-imports.mjs",
+    "lex:publish": "node scripts/publish-lexicons.mjs",
     "db:generate": "drizzle-kit generate",
     "db:up": "docker compose up -d db"
   },

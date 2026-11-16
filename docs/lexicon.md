@@ -38,7 +38,7 @@ ATProto lexicons have to stay backward compatible once records exist: no new req
 
 ## Publishing
 
-The lexicon isn't published for automatic resolution yet. That needs a foto-log account DID to hold the schema record and a `_lexicon.foto-log.com` TXT record. Tracked in a follow-up issue.
+See [Publishing foto-log's lexicons](#publishing-foto-logs-lexicons) below.
 
 # Lexicon: `com.foto-log.profile`
 
@@ -68,3 +68,32 @@ Images a member uploads to customize their fotolog page live in a `com.foto-log.
   - `setMemberImage()` uploads a blob and sets one field, or clears it, and/or sets `wallpaperMode`. It keeps the other fields and uses `swapRecord` so concurrent changes don't overwrite each other.
 - Images are served from the Bluesky CDN, like photos (`memberImageUrl`).
 - Writing the record needs the `repo:com.foto-log.profile` OAuth scope. Members who signed in before it was added are asked to sign in again.
+
+# Publishing foto-log's lexicons
+
+foto-log's record types (`com.foto-log.photo`, `.profile`, `.friend`) and its permission set (`com.foto-log.authFull`) are published as `com.atproto.lexicon.schema` records in the foto-log account's repo, with the NSID as the record key. A `_lexicon.foto-log.com` DNS TXT record points at that account, so any app or PDS can resolve a `com.foto-log.*` lexicon (atproto lexicon resolution).
+
+## The permission set
+
+[`lexicons/com/foto-log/authFull.json`](../lexicons/com/foto-log/authFull.json) bundles the repo permissions for every foto-log record type. Sign-in asks for `include:com.foto-log.authFull` instead of listing each `repo:com.foto-log.*` scope, and the PDS shows its title and detail on the consent screen.
+
+When a new record type is added, add it to the set and publish again. Per the [permission spec](https://atproto.com/specs/permission), PDSes re-resolve sets periodically and existing sessions pick up the new permissions when their tokens refresh, so members don't sign in again. `lib/oauth/permission-set.test.ts` fails if a record type in `lexicons/com/foto-log/` is missing from the set.
+
+A set can only cover collections under `com.foto-log`, and can't include blob permissions, so sign-in still asks for `repo:app.bsky.feed.post`, `repo:app.bsky.feed.threadgate` and `blob:image/*` separately.
+
+`lex:gen` skips `auth*.json`, since the code generator doesn't handle permission sets.
+
+## Steps
+
+1. Create an [app password](https://bsky.app/settings/app-passwords) for the foto-log account.
+2. Check what will be published: `npm run lex:publish -- --dry-run`
+3. Publish:
+   ```
+   LEXICON_ACCOUNT=foto-log.com LEXICON_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx npm run lex:publish
+   ```
+   It prints the DNS record to add. Set `LEXICON_SERVICE` if the account isn't on bsky.social.
+4. Add the TXT record in Route 53: `_lexicon.foto-log.com` → `"did=<the account's DID>"`. Use `_lexicon`, not `_atproto`.
+5. Check that `com.foto-log.photo` and `com.foto-log.authFull` resolve, with a lexicon resolver such as `goat`.
+6. Then switch sign-in to `include:com.foto-log.authFull` (`lib/oauth/scopes.ts`). Before the set resolves, PDSes reject the sign-in request.
+
+Publish again whenever a file in `lexicons/com/foto-log/` changes.

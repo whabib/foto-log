@@ -1,0 +1,18 @@
+{
+  "lexicon": 1,
+  "id": "com.foto-log.authFull",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Your fotolog on foto-log.com",
+      "detail": "Post photos to your fotolog, customize your page, and keep your Friends/Favorites list.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "repo",
+          "collection": ["com.foto-log.photo", "com.foto-log.profile", "com.foto-log.friend"]
+        }
+      ]
+    }
+  }
+}
