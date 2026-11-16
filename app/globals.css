@@ -361,13 +361,11 @@ button.danger {
 .member-box {
   max-width: 1100px;
   margin: 0 auto;
-  border: 1px solid var(--m-rule);
   background-color: var(--m-bg);
 }
 
 .member-title {
   padding: 16px 20px;
-  border-bottom: 1px solid var(--m-rule);
   text-align: center;
 }
 
@@ -401,7 +399,7 @@ body:has(.member-theme) {
 body:has(.member-theme) .site-header {
   background-color: var(--m-bg);
   color: var(--m-fg);
-  border-bottom-color: color-mix(in srgb, var(--m-fg) 30%, var(--m-bg));
+  border-bottom: none;
 }
 
 body:has(.member-theme) .site-header .brand {
@@ -752,11 +750,6 @@ body:has(.member-theme) .account-menu li button:hover {
   .member-theme.wallpaper-tile,
   .member-theme.wallpaper-fill {
     padding: 10px;
-  }
-
-  .member-box {
-    border-left: 0;
-    border-right: 0;
   }
 
   .member-title,
