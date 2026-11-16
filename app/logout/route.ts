@@ -1,16 +1,14 @@
-import { endUserSession } from "@/lib/auth";
-import { baseUrl } from "@/lib/config";
+import { signOutOfBrowser } from "@/lib/auth";
+import { isSameOrigin, seeOther } from "@/lib/same-origin";
 
 /**
- * Signs out and goes to the home page. A plain form POST to a fixed URL,
- * not a Server Action, so a page left open across a deploy can still sign
- * out: Server Action IDs change with every build.
+ * Signs the current account out and goes to the home page, signed in to
+ * the most recently used of this browser's other accounts, if any. A plain
+ * form POST to a fixed URL, not a Server Action, so a page left open across
+ * a deploy can still sign out: Server Action IDs change with every build.
  */
 export async function POST(request: Request) {
-  // SameSite=Lax still lets other origins on the same site post here.
-  if (request.headers.get("origin") !== new URL(baseUrl).origin) {
-    return new Response("Forbidden", { status: 403 });
-  }
-  await endUserSession();
-  return new Response(null, { status: 303, headers: { Location: "/" } });
+  if (!isSameOrigin(request)) return new Response("Forbidden", { status: 403 });
+  await signOutOfBrowser();
+  return seeOther("/");
 }

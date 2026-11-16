@@ -25,10 +25,14 @@ export const userSession = pgTable(
     id: text("id").primaryKey(),
     did: text("did").notNull(),
     handle: text("handle"),
+    /** The browser this session was signed in on, so one browser can hold several accounts. */
+    browserId: text("browser_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** When this account was last switched to in its browser; the most recent is next after a logout. */
+    lastActiveAt: timestamp("last_active_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
-  (t) => [index("user_session_did_idx").on(t.did)],
+  (t) => [index("user_session_did_idx").on(t.did), index("user_session_browser_idx").on(t.browserId)],
 );
 
 /** How a member's member page looks. Null columns mean the site default. */

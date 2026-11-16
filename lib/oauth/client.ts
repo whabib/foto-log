@@ -80,7 +80,7 @@ export function callbackErrorDetails(
 }
 
 /** Carried through the OAuth round trip in the `state` parameter. `tier` indexes SCOPE_TIERS. */
-export type SignInState = { input: string; tier: number };
+export type SignInState = { input: string; tier: number; selectAccount?: boolean };
 
 export const LAST_TIER = SCOPE_TIERS.length - 1;
 
@@ -90,7 +90,7 @@ export function parseSignInState(state: string | null | undefined): SignInState 
     const parsed = JSON.parse(state);
     if (typeof parsed?.input !== "string") return null;
     if (Number.isInteger(parsed.tier) && parsed.tier >= 0 && parsed.tier <= LAST_TIER) {
-      return { input: parsed.input, tier: parsed.tier };
+      return { input: parsed.input, tier: parsed.tier, ...(parsed.selectAccount === true ? { selectAccount: true } : {}) };
     }
     // Sign-ins started before the permission set: granular, then fallback.
     if (typeof parsed.fallback === "boolean") return { input: parsed.input, tier: parsed.fallback ? 2 : 1 };
@@ -105,17 +105,23 @@ export function parseSignInState(state: string | null | undefined): SignInState 
  * the browser to. Asks for the best scopes first and moves down
  * SCOPE_TIERS while the authorization server rejects them.
  */
-export async function startSignIn(input: string, tier = 0): Promise<URL> {
+export async function startSignIn(
+  input: string,
+  tier = 0,
+  opts: { selectAccount?: boolean } = {},
+): Promise<URL> {
   const client = await getOAuthClient();
-  const state: SignInState = { input, tier };
+  const state: SignInState = { input, tier, ...(opts.selectAccount ? { selectAccount: true } : {}) };
   try {
     return await client.authorize(input, {
       scope: SCOPE_TIERS[tier],
       state: JSON.stringify(state),
+      // Adding an account: let them pick or enter another one, not reuse the last.
+      ...(opts.selectAccount ? { prompt: "select_account" as const } : {}),
     });
   } catch (err) {
     if (tier < LAST_TIER && oauthErrorCode(err) === "invalid_scope") {
-      return startSignIn(input, tier + 1);
+      return startSignIn(input, tier + 1, opts);
     }
     throw err;
   }
