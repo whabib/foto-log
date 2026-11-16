@@ -28,6 +28,7 @@ const RESERVED = new Set([
   "fotolog",
   "fotologs",
   "friends",
+  "group",
   "groups",
   "health",
   "help",
