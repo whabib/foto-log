@@ -11,7 +11,7 @@ import {
 import { getMemberImages } from "@/lib/member-profile-server";
 import { getMemberSettings } from "@/lib/member-settings-server";
 import { resolveActor } from "@/lib/identity";
-import { memberImageUrl } from "@/lib/photos/urls";
+import { memberImageUrl, memberPath } from "@/lib/photos/urls";
 import { currentIdentity } from "@/lib/photos/server";
 import SettingsForm from "./SettingsForm";
 
@@ -55,6 +55,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           }}
           countries={countryOptions()}
           hasSaved={saved !== null}
+          memberPage={memberPath(identity)}
           images={
             images
               ? {

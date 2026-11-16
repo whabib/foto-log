@@ -6,6 +6,7 @@ import { contrastRatio, isHexColor, MIN_CONTRAST } from "@/lib/member-settings";
 import { resetSettings, type SaveState, saveSettings } from "./actions";
 import { useRouter } from "next/navigation";
 import MemberImageField, { type ImageError, NO_CHANGE, type PendingImage, saveImageChange } from "./MemberImageField";
+import { useLeaveWarning } from "./useLeaveWarning";
 import WallpaperField from "./WallpaperField";
 
 type Values = {
@@ -23,6 +24,8 @@ type Props = {
   defaults: { title: string; backgroundColor: string; textColor: string };
   countries: { code: string; name: string }[];
   hasSaved: boolean;
+  /** The member's own page, shown after a successful save. */
+  memberPage: string;
   /** Saved page images; undefined if they couldn't be loaded. */
   images?: { titleImage: string | null; wallpaper: string | null; wallpaperMode: "tile" | "fill" };
 };
@@ -74,7 +77,7 @@ function ColorField({
   );
 }
 
-export default function SettingsForm({ initial, defaults, countries, hasSaved, images }: Props) {
+export default function SettingsForm({ initial, defaults, countries, hasSaved, memberPage, images }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Values>(initial);
   // Image changes wait here until Save, like the rest of the form.
@@ -85,7 +88,11 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
   const [state, formAction, pending] = useActionState<SaveState, FormData>(
     async (prev, data) => {
       const result = await saveSettings(prev, data);
-      if (result.status !== "saved" || !images) return result;
+      if (result.status !== "saved") return result;
+      if (!images) {
+        router.push(memberPage);
+        return result;
+      }
       // Then the images, each separately, so one failing doesn't undo the others.
       const errors: typeof imageErrors = {};
       if (titleImage.kind !== "none") {
@@ -101,10 +108,13 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
         else setWallpaper(NO_CHANGE);
       }
       setImageErrors(errors);
-      router.refresh();
-      return Object.keys(errors).length
-        ? { status: "error", errors: {}, message: "Your settings were saved, but an image wasn't. See above." }
-        : result;
+      if (Object.keys(errors).length) {
+        router.refresh();
+        return { status: "error", errors: {}, message: "Your settings were saved, but an image wasn't. See above." };
+      }
+      // Everything saved: show the member their page.
+      router.push(memberPage);
+      return result;
     },
     { status: "idle" },
   );
@@ -116,6 +126,14 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
       ...(field === "country" ? { region: "" } : {}),
     }));
   const errors = state.status === "error" ? state.errors : {};
+
+  const dirty =
+    (Object.keys(values) as (keyof Values)[]).some((k) => values[k] !== initial[k]) ||
+    titleImage.kind !== "none" ||
+    wallpaper.kind !== "none" ||
+    (images !== undefined && wallpaperMode !== images.wallpaperMode);
+  // Not while saving, which ends by going to the member page.
+  useLeaveWarning(dirty && !pending && state.status !== "saved");
 
   const regions = regionOptions(values.country);
   const bg = isHexColor(values.backgroundColor) ? values.backgroundColor : defaults.backgroundColor;
