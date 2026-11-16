@@ -47,3 +47,8 @@ export function thumbnailUrl(did: string, cid: string): string {
 export function memberPath(actor: { did: string; handle: string | null }): string {
   return actor.handle ? `/@${actor.handle}` : `/${actor.did}`;
 }
+
+/** Path of a member's full Friends/Favorites list, e.g. /@alice.bsky.social/friends. */
+export function friendsPath(actor: { did: string; handle: string | null }): string {
+  return `${memberPath(actor)}/friends`;
+}

@@ -8,6 +8,7 @@ import {
   FRIEND_COLLECTION,
   type FriendCard,
   friendFromRecord,
+  type FriendRow,
   friendRecordKey,
   newestCards,
   STARTER_FRIEND,
@@ -22,14 +23,14 @@ import { TtlCache } from "@/lib/ttl-cache";
 const MAX_LIST_PAGES = 10;
 /** Most friends whose newest photo is read for the right column. */
 const MAX_CARD_LOOKUPS = 200;
-const LOOKUP_CONCURRENCY = 12;
+const LOOKUP_CONCURRENCY = 16;
 
 // A member's own changes clear their entry.
 const listCache = new TtlCache<string, string[]>(60_000, 5000);
 // Whether one member is on another's list, keyed "viewer subject".
 const onListCache = new TtlCache<string, boolean>(60_000, 10_000);
-// Each friend's newest photo, shared by every list they're on.
-const cardCache = new TtlCache<string, FriendCard | null>(5 * 60_000, 10_000);
+// Each friend's handle and newest photo, shared by every list they're on.
+const rowCache = new TtlCache<string, FriendRow>(5 * 60_000, 10_000);
 
 /**
  * The DIDs on `actor`'s Friends/Favorites list, read from their repo, in
@@ -109,14 +110,15 @@ export async function isOnList(viewerDid: string, did: string): Promise<boolean>
   return onList;
 }
 
-/** The friend's newest photo as a right-column card, or null if they have none. */
-async function friendCard(did: string): Promise<FriendCard | null> {
-  const hit = cardCache.get(did);
+/** The friend's handle and newest photo. Without a handle or photo if they can't be read. */
+async function friendRow(did: string): Promise<FriendRow> {
+  const hit = rowCache.get(did);
   if (hit) return hit.value;
   const actor = await resolveActor(did);
-  if (!actor) return null; // don't cache: resolution may be failing for a moment
+  // Don't cache: resolution may be failing for a moment.
+  if (!actor) return { did, handle: null, latest: null };
   const [photo] = await listPhotos(actor, { limit: 1 });
-  const card = photo
+  const latest: FriendCard | null = photo
     ? {
         did,
         handle: actor.handle,
@@ -126,8 +128,9 @@ async function friendCard(did: string): Promise<FriendCard | null> {
         createdAt: photo.record.createdAt,
       }
     : null;
-  cardCache.set(did, card);
-  return card;
+  const row = { did, handle: actor.handle, latest };
+  rowCache.set(did, row);
+  return row;
 }
 
 /** Runs `fn` over `items`, at most `limit` at a time. */
@@ -144,15 +147,28 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return results;
 }
 
+/** Each friend on `dids` with their newest photo, read from their own PDS until the index (#6) can answer this. */
+async function friendRows(dids: string[]): Promise<FriendRow[]> {
+  return mapLimit(dids, LOOKUP_CONCURRENCY, (did) =>
+    friendRow(did).catch(() => ({ did, handle: null, latest: null })),
+  );
+}
+
 /**
  * The right column of `owner`'s page: the friends on their list with the
- * newest photos, one card each, newest first. Reads each friend's newest
- * photo from their own PDS until the index (#6) can answer this.
+ * newest photos, one card each, newest first.
  */
 export async function friendCards(owner: Actor, count = FRIEND_CARDS): Promise<FriendCard[]> {
-  const friends = (await listFriends(owner)).slice(0, MAX_CARD_LOOKUPS);
-  const cards = await mapLimit(friends, LOOKUP_CONCURRENCY, (did) => friendCard(did).catch(() => null));
-  return newestCards(cards, count);
+  const rows = await friendRows((await listFriends(owner)).slice(0, MAX_CARD_LOOKUPS));
+  return newestCards(
+    rows.map((r) => r.latest),
+    count,
+  );
+}
+
+/** Everyone on `owner`'s list, with their newest photos, for the full Friends/Favorites page. */
+export async function allFriends(owner: Actor): Promise<FriendRow[]> {
+  return friendRows(await listFriends(owner));
 }
 
 function errorName(err: unknown): string | undefined {
