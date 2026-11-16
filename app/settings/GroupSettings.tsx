@@ -43,9 +43,10 @@ export default function GroupSettings({
       <div className="field group-settings" id="group">
         <span className="label">Group</span>
         <p className="hint">
-          Make this account a group: other members can join it and post their photos to its fotolog, one a day
-          each. Their photos are shared on Bluesky from this account, so foto-log keeps this account signed in
-          for them, even after you sign out here.
+          Make this account a group: other members can ask to join it and post their photos to its fotolog, one
+          a day each. You approve who joins (you can let anyone join later). Their photos are shared on Bluesky
+          from this account, so foto-log stays signed in to it for them, even after you sign out here. To end
+          that, choose Stop being a group, then sign out.
         </p>
         <button
           type="button"
@@ -53,7 +54,7 @@ export default function GroupSettings({
           disabled={pending}
           onClick={() => {
             if (confirm("Make this account a group? Members will be able to post photos to it.")) {
-              run(() => setGroupAction("open"));
+              run(() => setGroupAction("approval"));
             }
           }}
         >
@@ -75,7 +76,10 @@ export default function GroupSettings({
   return (
     <div className="field group-settings" id="group">
       <span className="label">Group</span>
-      <p className="hint">This account is a group. Members can post a photo to it once a day.</p>
+      <p className="hint">
+        This account is a group. Members can post a photo to it once a day, so foto-log stays signed in to it
+        even after you sign out. To end that, choose Stop being a group, then sign out.
+      </p>
       <fieldset className="group-policy" disabled={pending}>
         <legend className="sr-only">Who can join</legend>
         <label>
@@ -149,7 +153,7 @@ export default function GroupSettings({
         className="link-button"
         disabled={pending}
         onClick={() => {
-          if (confirm("Stop being a group? Everyone is taken out of it, and its photos stay on this fotolog.")) {
+          if (confirm("Stop being a group? Everyone is taken out of it, its photos stay on this fotolog, and foto-log lets go of this account's sign-in when you sign out.")) {
             run(() => setGroupAction(null));
           }
         }}
