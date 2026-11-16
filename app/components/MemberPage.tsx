@@ -273,9 +273,12 @@ function CenterPhoto({
             </>
           )}
         </p>
+        {/* The owner's Delete and a visitor's Add/Remove never show together. */}
         {isOwner && <DeleteButton rkey={photo.rkey} />}
+        {onViewerList != null && (
+          <FriendButton did={owner.did} onList={onViewerList} canAdd={canAdd} handle={owner.handle} inline />
+        )}
       </div>
-      {onViewerList != null && <FriendButton did={owner.did} onList={onViewerList} canAdd={canAdd} handle={owner.handle} />}
 
       <div className="photo-text">
         {record.caption && <h2 className="caption">{record.caption}</h2>}
