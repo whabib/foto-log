@@ -48,6 +48,7 @@ const RESERVED = new Set([
   "security",
   "settings",
   "signin",
+  "signout",
   "signup",
   "staff",
   "support",
