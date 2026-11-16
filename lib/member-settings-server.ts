@@ -45,6 +45,21 @@ export async function saveMemberSettings(did: string, value: MemberSettings): Pr
   cache.delete(did);
 }
 
+/**
+ * Saves only the settings in `patch`, leaving `did`'s other settings as
+ * they are in the database, so saving one Settings page can't undo a save
+ * made on another.
+ */
+export async function updateMemberSettings(did: string, patch: Partial<MemberSettings>): Promise<void> {
+  const db = await getDb();
+  const now = new Date();
+  await db
+    .insert(memberSettings)
+    .values({ did, ...patch, createdAt: now, updatedAt: now })
+    .onConflictDoUpdate({ target: memberSettings.did, set: { ...patch, updatedAt: now } });
+  cache.delete(did);
+}
+
 /** Clears `did`'s settings back to the defaults. */
 export async function resetMemberSettings(did: string): Promise<void> {
   const db = await getDb();

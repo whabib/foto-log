@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { type SettingsField, validateMemberSettings } from "@/lib/member-settings";
-import { getMemberSettings, resetMemberSettings, saveMemberSettings } from "@/lib/member-settings-server";
+import { getMemberSettings, updateMemberSettings } from "@/lib/member-settings-server";
 import { approveRequest, leaveGroup, setGroup } from "@/lib/groups-server";
 import { checkName, memberName, type SetNameResult, setFotologName, setShowFotologName } from "@/lib/fotolog-name-server";
 
@@ -36,7 +36,11 @@ export async function saveSettings(_prev: SaveState, form: FormData): Promise<Sa
   // Only members with a Fotolog name get the choice.
   const primary = form.get("primaryName")?.toString();
   try {
-    await saveMemberSettings(user.did, result.value);
+    // Only this page's settings are written; the others were filled in for validation.
+    await updateMemberSettings(
+      user.did,
+      Object.fromEntries(SECTION_FIELDS[section].map((f) => [f, result.value[f]])),
+    );
     if (primary === "fotolog" || primary === "bluesky") {
       const { name } = await memberName(user.did);
       if (name) await setShowFotologName(user.did, primary === "fotolog");
@@ -54,18 +58,7 @@ export async function resetSettings() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   // The page's look only: the location belongs to the Profile page.
-  const saved = await getMemberSettings(user.did);
-  if (saved?.country) {
-    await saveMemberSettings(user.did, {
-      ...saved,
-      title: null,
-      backgroundColor: null,
-      textColor: null,
-      linkColor: null,
-    });
-  } else {
-    await resetMemberSettings(user.did);
-  }
+  await updateMemberSettings(user.did, { title: null, backgroundColor: null, textColor: null, linkColor: null });
   revalidatePath("/settings", "layout");
   // A fresh value each time, so the page remounts the form with the defaults.
   redirect(`/settings/customize?reset=${Date.now()}`);
