@@ -50,6 +50,13 @@
       "when": 1794849036204,
       "tag": "0006_fotolog_name",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794854589296,
+      "tag": "0007_multi_account",
+      "breakpoints": true
     }
   ]
 }

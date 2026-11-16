@@ -2,7 +2,7 @@
 
 import { isValidDid, isValidHandle } from "@atproto/syntax";
 import { redirect } from "next/navigation";
-import { endUserSession, getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, hasRoomForAccount, signOutOfBrowser } from "@/lib/auth";
 import { startSignIn } from "@/lib/oauth/client";
 
 /** Bluesky's sign-in server, used when no handle is given. */
@@ -15,9 +15,12 @@ export async function signIn(formData: FormData) {
   if (raw && !isValidHandle(raw) && !isValidDid(raw)) {
     redirect("/login?error=invalid_handle");
   }
+  // Signing in while signed in adds another account to this browser.
+  const adding = (await getCurrentUser()) !== null;
+  if (adding && !(await hasRoomForAccount())) redirect("/accounts?error=full");
   let url: URL;
   try {
-    url = await startSignIn(raw || BLUESKY_ENTRYWAY);
+    url = await startSignIn(raw || BLUESKY_ENTRYWAY, 0, { selectAccount: adding });
   } catch (err) {
     console.warn("Sign-in could not start", { input: raw, err });
     redirect(`/login?error=${raw ? "resolve_failed" : "failed"}`);
@@ -27,12 +30,12 @@ export async function signIn(formData: FormData) {
 
 /**
  * Signs the current member in again, so they can grant permissions added
- * since they last signed in. Ends this session first, since /login sends
- * signed-in members away.
+ * since they last signed in. Ends this session first; signing in again
+ * makes a new one.
  */
 export async function reauthorize() {
   const user = await getCurrentUser();
-  await endUserSession();
+  await signOutOfBrowser(undefined, { switchToNext: false });
   if (!user) redirect("/login");
   let url: URL;
   try {

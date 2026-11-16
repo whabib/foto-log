@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, hasRoomForAccount } from "@/lib/auth";
 import { signIn } from "./actions";
 
 export const metadata: Metadata = { title: "Sign in · foto-log" };
@@ -13,13 +13,21 @@ const ERRORS: Record<string, string> = {
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  if (await getCurrentUser()) redirect("/");
-  const { error } = await searchParams;
+  const { error, add } = await searchParams;
+  // Signed-in members come here only to add another account (or after that failed).
+  const adding = (await getCurrentUser()) !== null;
+  if (adding && add === undefined && error === undefined) redirect("/");
+  if (adding && !(await hasRoomForAccount())) redirect("/accounts?error=full");
   const message = typeof error === "string" ? (ERRORS[error] ?? ERRORS.failed) : null;
 
   return (
     <main className="login">
-      <h1>Sign in to foto-log</h1>
+      <h1>{adding ? "Log into another account" : "Sign in to foto-log"}</h1>
+      {adding && (
+        <p className="muted">
+          You&rsquo;ll stay signed in to your other accounts. Switch between them from your account menu.
+        </p>
+      )}
       <p className="muted">
         Use your Bluesky account, or any account on the AT Protocol. Your photos are stored in
         your own account, not on foto-log.

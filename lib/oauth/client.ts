@@ -105,17 +105,23 @@ export function parseSignInState(state: string | null | undefined): SignInState 
  * the browser to. Asks for the best scopes first and moves down
  * SCOPE_TIERS while the authorization server rejects them.
  */
-export async function startSignIn(input: string, tier = 0): Promise<URL> {
+export async function startSignIn(
+  input: string,
+  tier = 0,
+  opts: { selectAccount?: boolean } = {},
+): Promise<URL> {
   const client = await getOAuthClient();
   const state: SignInState = { input, tier };
   try {
     return await client.authorize(input, {
       scope: SCOPE_TIERS[tier],
       state: JSON.stringify(state),
+      // Adding an account: let them pick or enter another one, not reuse the last.
+      ...(opts.selectAccount ? { prompt: "select_account" as const } : {}),
     });
   } catch (err) {
     if (tier < LAST_TIER && oauthErrorCode(err) === "invalid_scope") {
-      return startSignIn(input, tier + 1);
+      return startSignIn(input, tier + 1, opts);
     }
     throw err;
   }

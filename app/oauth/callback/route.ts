@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createUserSession, lookupHandle, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
+import { lookupHandle, signInOnBrowser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { primaryName } from "@/lib/fotolog-name-server";
 import { welcomeNewMember } from "@/lib/friends-server";
@@ -26,16 +26,14 @@ export async function GET(request: NextRequest) {
   try {
     const { session } = await client.callback(params);
     const handle = await lookupHandle(session);
-    const cookie = await createUserSession(session.did, handle);
-    if (!cookie) return redirectTo("/login?error=failed");
+    const signedIn = await signInOnBrowser(session.did, handle);
+    if (!signedIn.ok) return redirectTo(signedIn.reason === "full" ? "/accounts?error=full" : "/login?error=failed");
     await welcomeNewMember({ did: session.did, handle });
     await rememberHandle(session.did, handle).catch((err) => console.warn("Couldn't record handle", { err }));
     await backfillOnSignIn(session.did);
     // Members land on their own fotolog.
     const name = await primaryName(session.did).catch(() => null);
-    const response = redirectTo(memberPath({ did: session.did, handle, name }));
-    response.cookies.set(SESSION_COOKIE, cookie, sessionCookieOptions);
-    return response;
+    return redirectTo(memberPath({ did: session.did, handle, name }));
   } catch (err) {
     const details = callbackErrorDetails(err);
     if (details) {

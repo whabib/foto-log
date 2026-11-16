@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import AccountMenu from "@/app/components/AccountMenu";
+import AccountWatcher from "@/app/components/AccountWatcher";
 import { currentIdentity } from "@/lib/photos/server";
 import { memberPath } from "@/lib/photos/urls";
 
@@ -17,6 +18,7 @@ export default async function Header() {
       </Link>
       {user && identity ? (
         <div className="account">
+          <AccountWatcher did={user.did} />
           <AccountMenu
             label={identity.name ?? (identity.handle ? `@${identity.handle}` : user.did)}
             myPage={memberPath(identity)}

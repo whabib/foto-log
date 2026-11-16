@@ -1385,3 +1385,185 @@ body:has(.member-theme) .account-menu li button:hover {
 #fotologName-status:empty {
   display: none;
 }
+
+/* Switch accounts */
+.accounts-page {
+  max-width: 560px;
+  margin: 32px auto;
+  padding: 0 16px;
+}
+
+.accounts-page h1 {
+  margin: 0 0 24px;
+}
+
+.accounts-list {
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+}
+
+.account-row + .account-row {
+  border-top: 1px solid var(--border);
+}
+
+.account-switch {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.account-switch button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-switch button:hover:not(:disabled),
+.account-switch button:focus-visible {
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+
+.account-switch button:disabled {
+  cursor: default;
+}
+
+.account-avatar {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.account-avatar.avatar-empty {
+  display: inline-block;
+  background: color-mix(in srgb, var(--fg) 15%, transparent);
+}
+
+.account-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.account-names > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-current {
+  margin-left: auto;
+  font-size: 0.875rem;
+  color: var(--accent);
+}
+
+.account-actions {
+  position: relative;
+  flex: none;
+}
+
+.account-actions summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.account-actions summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-actions summary:hover,
+.account-actions summary:focus-visible {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+.account-actions ul {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  min-width: 200px;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+}
+
+.account-actions form {
+  margin: 0;
+}
+
+.account-actions button {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.account-actions button:hover,
+.account-actions button:focus-visible {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+/* Covers a tab whose account was switched in another tab, so it can't act as the wrong one. */
+.account-switched {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.5);
+}
+
+.account-switched > div {
+  max-width: 420px;
+  padding: 24px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.3);
+}
+
+.account-switched p {
+  margin: 0 0 16px;
+}
+
+.account-switched button {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+}

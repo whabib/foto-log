@@ -66,6 +66,9 @@ export default function AccountMenu({
           <Link href="/settings">Settings</Link>
         </li>
         <li>
+          <Link href="/accounts">Switch accounts</Link>
+        </li>
+        <li>
           {/* A plain POST, so it still works on a page opened before a deploy. */}
           <form method="post" action="/logout">
             <button type="submit">Logout</button>
