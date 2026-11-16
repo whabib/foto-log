@@ -569,6 +569,7 @@ body:has(.member-theme) .account-menu li button:hover {
 .photo-text .caption {
   margin: 0 0 4px;
   font-size: 1.25rem;
+  font-weight: normal;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
