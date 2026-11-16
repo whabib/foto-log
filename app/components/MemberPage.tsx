@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { type CSSProperties, type ReactNode, Suspense } from "react";
 import LocalTime from "@/app/components/LocalTime";
-import ShareButton from "@/app/components/ShareButton";
 import FriendButton from "@/app/components/friends/FriendButton";
 import FriendsColumn from "@/app/components/friends/FriendsColumn";
 import Guestbook from "@/app/components/guestbook/Guestbook";
 import { EMPTY_GUESTBOOK, type Guestbook as GuestbookData } from "@/lib/guestbook/entries";
 import DeleteButton from "@/app/[actor]/[date]/DeleteButton";
-import { baseUrl } from "@/lib/config";
 import type { Actor } from "@/lib/identity";
 import { isHexColor, type MemberPageLook } from "@/lib/member-settings";
 import { parsePhotoRecordKey } from "@/lib/photo-record";
@@ -259,22 +257,23 @@ function CenterPhoto({
         height={record.aspectRatio?.height}
       />
 
-      <p className="photo-util">
-        <Link href={permalink}>Permalink</Link>
-        {bskyUrl && (
-          <>
-            {" | "}
-            <a href={bskyUrl}>View on Bluesky</a>
-            {" | "}
-            {/* Reports go through Bluesky's moderation, from the post's menu. */}
-            <a href={bskyUrl} title="Open the post on Bluesky and use its menu to report it">
-              Report photo
-            </a>
-          </>
-        )}
-        {" | "}
-        <ShareButton url={`${baseUrl}${permalink}`} title={record.caption ?? formatDay(record.displayDate)} />
-      </p>
+      <div className="photo-util">
+        <p>
+          <Link href={permalink}>Permalink</Link>
+          {bskyUrl && (
+            <>
+              {" | "}
+              <a href={bskyUrl}>View on Bluesky</a>
+              {" | "}
+              {/* Reports go through Bluesky's moderation, from the post's menu. */}
+              <a href={bskyUrl} title="Open the post on Bluesky and use its menu to report it">
+                Report photo
+              </a>
+            </>
+          )}
+        </p>
+        {isOwner && <DeleteButton rkey={photo.rkey} />}
+      </div>
       {onViewerList != null && <FriendButton did={owner.did} onList={onViewerList} canAdd={canAdd} handle={owner.handle} />}
 
       <div className="photo-text">
@@ -286,12 +285,6 @@ function CenterPhoto({
           Photo uploaded at <LocalTime iso={record.createdAt} format="time" />
         </p>
       </div>
-
-      {isOwner && (
-        <div className="owner-actions">
-          <DeleteButton rkey={photo.rkey} />
-        </div>
-      )}
 
       <Guestbook
         guestbook={guestbook ?? EMPTY_GUESTBOOK}

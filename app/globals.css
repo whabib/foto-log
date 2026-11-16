@@ -313,19 +313,7 @@ a {
   border-radius: 8px;
 }
 
-.owner-actions {
-  margin-top: 24px;
-}
 
-button.danger {
-  font: inherit;
-  padding: 8px 14px;
-  border: 1px solid var(--error);
-  border-radius: 8px;
-  background: none;
-  color: var(--error);
-  cursor: pointer;
-}
 
 /* Member page: the member's colors around a three-column box, after the original Fotolog. */
 .member-theme {
@@ -573,8 +561,21 @@ body:has(.member-theme) .account-menu li button:hover {
 }
 
 .photo-util {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
   margin: 8px 0 16px;
   font-size: 0.875rem;
+}
+
+.photo-util p {
+  margin: 0;
+}
+
+/* Flush with the photo's right edge. */
+.photo-delete {
+  margin-left: auto;
 }
 
 .photo-text .caption {
@@ -787,10 +788,6 @@ body:has(.member-theme) .account-menu li button:hover {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
   }
-}
-
-.member-theme .owner-actions {
-  margin-top: 16px;
 }
 
 .guestbook {
