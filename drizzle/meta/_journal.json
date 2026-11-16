@@ -71,6 +71,13 @@
       "when": 1794860887376,
       "tag": "0009_group_post_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794869315257,
+      "tag": "0010_group_post",
+      "breakpoints": true
     }
   ]
 }

@@ -10,7 +10,7 @@ import { memberPageLook } from "@/lib/member-settings";
 import { resolveMemberPage } from "@/lib/member-resolve-server";
 import { getMemberImages } from "@/lib/member-profile-server";
 import { getMemberSettings } from "@/lib/member-settings-server";
-import { getGroup, memberCount, membership, type Group, type MembershipStatus } from "@/lib/groups-server";
+import { getGroup, isGroupPostBy, memberCount, membership, type Group, type MembershipStatus } from "@/lib/groups-server";
 import { resolveActor } from "@/lib/identity";
 import { isValidDateKey, parsePhotoRecordKey, photoRecordKey } from "@/lib/photo-record";
 import { railWindow } from "@/lib/photos/rail";
@@ -88,7 +88,7 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
           ([members, viewer]): GroupInfo => ({ ...group, members, viewer }),
         )
       : null,
-    photo?.record.uploadedBy ? uploaderOf(photo.record.uploadedBy) : null,
+    photo ? creditFor(owner.did, photo) : null,
   ]);
 
   return {
@@ -110,6 +110,18 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     uploader,
   };
 });
+
+/**
+ * Who a group's photo is credited to: its uploadedBy, but only when
+ * foto-log posted it for that member, since anyone writing to the group's
+ * repo could put any DID there.
+ */
+async function creditFor(groupDid: string, photo: StoredPhoto): Promise<MemberRef | null> {
+  const by = photo.record.uploadedBy;
+  if (!by) return null;
+  const ok = await isGroupPostBy(groupDid, photo.rkey, by).catch(() => false);
+  return ok ? uploaderOf(by) : null;
+}
 
 /** Who posted a group's photo: their handle and primary name, or just their DID. */
 async function uploaderOf(did: string): Promise<MemberRef> {

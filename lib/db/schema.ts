@@ -145,3 +145,20 @@ export const groupPostClaim = pgTable(
     unique("group_post_claim_sequence").on(t.groupDid, t.uploadDate, t.sequence),
   ],
 );
+
+/**
+ * Photos members posted to a group through foto-log, and who posted each.
+ * A photo's uploadedBy credit is shown only when it matches a row here, so
+ * a record written to the group's repo some other way can't claim to be
+ * by someone.
+ */
+export const groupPost = pgTable(
+  "group_post",
+  {
+    groupDid: text("group_did").notNull(),
+    rkey: text("rkey").notNull(),
+    memberDid: text("member_did").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.groupDid, t.rkey] })],
+);

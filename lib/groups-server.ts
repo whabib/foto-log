@@ -3,7 +3,7 @@ import { and, asc, count, eq, lt, max, sql } from "drizzle-orm";
 import { cache } from "react";
 import type { CurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { fotologGroup, groupMember, groupPostClaim, member } from "@/lib/db/schema";
+import { fotologGroup, groupMember, groupPost, groupPostClaim, member } from "@/lib/db/schema";
 
 export type JoinPolicy = "open" | "approval";
 export type Group = { did: string; joinPolicy: JoinPolicy };
@@ -225,4 +225,30 @@ export async function releaseGroupPost(groupDid: string, uploadDate: string, mem
       ),
     )
     .catch((err) => console.warn("Couldn't release a group post claim; it expires", { groupDid, err }));
+}
+
+/** Notes that `memberDid` posted the group's photo `rkey` through foto-log. */
+export async function recordGroupPost(groupDid: string, rkey: string, memberDid: string): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(groupPost)
+    .values({ groupDid, rkey, memberDid })
+    .onConflictDoUpdate({ target: [groupPost.groupDid, groupPost.rkey], set: { memberDid, createdAt: new Date() } });
+}
+
+/** Forgets who posted the group's photo `rkey`, when it wasn't saved or was deleted. */
+export async function forgetGroupPost(groupDid: string, rkey: string): Promise<void> {
+  const db = await getDb();
+  await db.delete(groupPost).where(and(eq(groupPost.groupDid, groupDid), eq(groupPost.rkey, rkey)));
+}
+
+/** Whether foto-log posted the group's photo `rkey` for `memberDid`, so its credit can be shown. */
+export async function isGroupPostBy(groupDid: string, rkey: string, memberDid: string): Promise<boolean> {
+  const db = await getDb();
+  const [row] = await db
+    .select({ rkey: groupPost.rkey })
+    .from(groupPost)
+    .where(and(eq(groupPost.groupDid, groupDid), eq(groupPost.rkey, rkey), eq(groupPost.memberDid, memberDid)))
+    .limit(1);
+  return row !== undefined;
 }

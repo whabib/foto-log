@@ -4,7 +4,7 @@ import type { CurrentUser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { resolveActor, type Actor } from "@/lib/identity";
 import { primaryName } from "@/lib/fotolog-name-server";
-import { claimGroupPost, getGroup, membership, releaseGroupPost } from "@/lib/groups-server";
+import { claimGroupPost, forgetGroupPost, getGroup, membership, recordGroupPost, releaseGroupPost } from "@/lib/groups-server";
 import { getOAuthClient } from "@/lib/oauth/client";
 import { fetchFromPds } from "@/lib/safe-fetch";
 import {
@@ -310,6 +310,8 @@ async function writePhoto(
       sequence,
       uploadedBy,
     });
+    // Noted first, so the credit holds even if the response is lost.
+    if (uploadedBy) await recordGroupPost(repo, rkey, uploadedBy);
     // createRecord with an explicit key fails if the key exists, so two
     // uploads racing for the same key can't both succeed.
     const { data: created } = await agent.com.atproto.repo.createRecord({
@@ -343,6 +345,11 @@ async function writePhoto(
       }
     }
     if (savedPostUri === post.uri) return; // it was saved after all
+    if (uploadedBy) {
+      await forgetGroupPost(repo, rkey).catch((forgetErr) =>
+        console.warn("Couldn't forget a group post that wasn't saved", { repo, rkey, forgetErr }),
+      );
+    }
     const postRkey = post.uri.split("/").pop()!;
     await agent.com.atproto.repo
       .deleteRecord({ repo, collection: POST_COLLECTION, rkey: postRkey })
@@ -455,6 +462,9 @@ export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void
   }
   await agent.com.atproto.repo.applyWrites({ repo: user.did, writes });
   await updateIndex((index) => index.unindexPhoto(user.did, rkey));
+  await forgetGroupPost(user.did, rkey).catch((err) =>
+    console.warn("Couldn't forget a deleted group post", { did: user.did, rkey, err }),
+  );
 }
 
 /**
