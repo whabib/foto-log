@@ -1329,3 +1329,14 @@ body:has(.member-theme) .account-menu li button:hover {
   height: 70%;
   border: 1px solid rgb(0 0 0 / 0.2);
 }
+
+/* Groups the settings fields so saving can lock them; no box of its own. */
+.settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}

@@ -6,6 +6,7 @@ import { contrastRatio, isHexColor, MIN_CONTRAST } from "@/lib/member-settings";
 import { resetSettings, type SaveState, saveSettings } from "./actions";
 import { useRouter } from "next/navigation";
 import MemberImageField, { type ImageError, NO_CHANGE, type PendingImage, saveImageChange } from "./MemberImageField";
+import { useLeaveWarning } from "./useLeaveWarning";
 import WallpaperField from "./WallpaperField";
 
 type Values = {
@@ -23,6 +24,8 @@ type Props = {
   defaults: { title: string; backgroundColor: string; textColor: string };
   countries: { code: string; name: string }[];
   hasSaved: boolean;
+  /** The member's own page, shown after a successful save. */
+  memberPage: string;
   /** Saved page images; undefined if they couldn't be loaded. */
   images?: { titleImage: string | null; wallpaper: string | null; wallpaperMode: "tile" | "fill" };
 };
@@ -74,7 +77,7 @@ function ColorField({
   );
 }
 
-export default function SettingsForm({ initial, defaults, countries, hasSaved, images }: Props) {
+export default function SettingsForm({ initial, defaults, countries, hasSaved, memberPage, images }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Values>(initial);
   // Image changes wait here until Save, like the rest of the form.
@@ -85,7 +88,11 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
   const [state, formAction, pending] = useActionState<SaveState, FormData>(
     async (prev, data) => {
       const result = await saveSettings(prev, data);
-      if (result.status !== "saved" || !images) return result;
+      if (result.status !== "saved") return result;
+      if (!images) {
+        router.push(memberPage);
+        return result;
+      }
       // Then the images, each separately, so one failing doesn't undo the others.
       const errors: typeof imageErrors = {};
       if (titleImage.kind !== "none") {
@@ -101,10 +108,13 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
         else setWallpaper(NO_CHANGE);
       }
       setImageErrors(errors);
-      router.refresh();
-      return Object.keys(errors).length
-        ? { status: "error", errors: {}, message: "Your settings were saved, but an image wasn't. See above." }
-        : result;
+      if (Object.keys(errors).length) {
+        router.refresh();
+        return { status: "error", errors: {}, message: "Your settings were saved, but an image wasn't. See above." };
+      }
+      // Everything saved: show the member their page.
+      router.push(memberPage);
+      return result;
     },
     { status: "idle" },
   );
@@ -116,6 +126,14 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
       ...(field === "country" ? { region: "" } : {}),
     }));
   const errors = state.status === "error" ? state.errors : {};
+
+  const dirty =
+    (Object.keys(values) as (keyof Values)[]).some((k) => values[k] !== initial[k]) ||
+    titleImage.kind !== "none" ||
+    wallpaper.kind !== "none" ||
+    (images !== undefined && wallpaperMode !== images.wallpaperMode);
+  // Stays on while saving; the redirect after a save is programmatic, so it isn't asked about.
+  useLeaveWarning(dirty);
 
   const regions = regionOptions(values.country);
   const bg = isHexColor(values.backgroundColor) ? values.backgroundColor : defaults.backgroundColor;
@@ -145,143 +163,147 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, i
           startTransition(() => formAction(data));
         }}
       >
-        <div className="field">
-          <label htmlFor="title">Title</label>
-          <input
-            id="title"
-            name="title"
-            type="text"
-            value={values.title}
-            placeholder={defaults.title}
-            onChange={(e) => set("title")(e.target.value)}
-          />
-          <p className="hint">Leave blank to use &ldquo;{defaults.title}&rdquo;.</p>
-          {errors.title && <p className="field-error">{errors.title}</p>}
-        </div>
-
-        {images && (
-          <MemberImageField
-            field="titleImage"
-            label="Title Image"
-            current={images.titleImage}
-            pending={titleImage}
-            onChange={setTitleImage}
-            disabled={pending}
-            error={imageErrors.titleImage}
-            alt={values.title.trim() || defaults.title}
-            background={bg}
-            previewClassName="title-image-preview"
-            hint="Your title will be used as the alt text for the image. It replaces the text title across the top of your page. Wide images work best, like 738×60, shown up to 150px tall."
-          />
-        )}
-
-        <fieldset className="field">
-          <legend>Location</legend>
-          <label htmlFor="country">Country</label>
-          <select id="country" name="country" value={values.country} onChange={(e) => set("country")(e.target.value)}>
-            <option value="">Not shown</option>
-            {countries.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          {errors.country && <p className="field-error">{errors.country}</p>}
-
-          {values.country && (
-            <>
-              <label htmlFor="region">
-                {regionLabel(values.country)}
-                {!regions && <span className="optional"> (optional)</span>}
-              </label>
-              {regions ? (
-                <select id="region" name="region" value={values.region} onChange={(e) => set("region")(e.target.value)}>
-                  <option value="">Not shown</option>
-                  {regions.map((r) => (
-                    <option key={r.code} value={r.code}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  id="region"
-                  name="region"
-                  type="text"
-                  value={values.region}
-                  onChange={(e) => set("region")(e.target.value)}
-                />
-              )}
-              {errors.region && <p className="field-error">{errors.region}</p>}
-
-              <label htmlFor="locality">
-                City or town <span className="optional">(optional)</span>
-              </label>
-              <input
-                id="locality"
-                name="locality"
-                type="text"
-                value={values.locality}
-                onChange={(e) => set("locality")(e.target.value)}
-              />
-              {errors.locality && <p className="field-error">{errors.locality}</p>}
-            </>
-          )}
-        </fieldset>
-
-        <ColorField
-          id="backgroundColor"
-          label="Background color"
-          value={values.backgroundColor}
-          fallback={defaults.backgroundColor}
-          error={errors.backgroundColor}
-          onChange={set("backgroundColor")}
-        />
-        <ColorField
-          id="textColor"
-          label="Text color"
-          value={values.textColor}
-          fallback={defaults.textColor}
-          error={errors.textColor}
-          onChange={set("textColor")}
-        />
-        <ColorField
-          id="linkColor"
-          label="Link color"
-          value={values.linkColor}
-          fallback={fg}
-          error={errors.linkColor}
-          onChange={set("linkColor")}
-        />
-        <p className="hint">Leave the link color blank to match the text. Links show in the text color when hovered.</p>
-
-        <div className="field">
-          <span className="label">Preview</span>
-          <div className="member-preview" style={{ backgroundColor: bg, color: fg }}>
-            <strong>{values.title.trim() || defaults.title}</strong>
-            {previewLocation && <span>{previewLocation}</span>}
-            <span style={{ color: link, textDecoration: "underline" }}>A link</span>
+        {/* Locked while saving, so no edit is made after the values were sent. */}
+        <fieldset className="settings-fields" disabled={pending}>
+          <div className="field">
+            <label htmlFor="title">Title</label>
+            <input
+              id="title"
+              name="title"
+              type="text"
+              value={values.title}
+              placeholder={defaults.title}
+              onChange={(e) => set("title")(e.target.value)}
+            />
+            <p className="hint">Leave blank to use &ldquo;{defaults.title}&rdquo;.</p>
+            {errors.title && <p className="field-error">{errors.title}</p>}
           </div>
-          {Math.min(ratio, linkRatio) < MIN_CONTRAST && (
-            <p className="warning" role="status">
-              These colors may be hard to read (contrast {Math.min(ratio, linkRatio).toFixed(1)}:1; at least {MIN_CONTRAST}:1 is
-              recommended). You can still save them.
-            </p>
-          )}
-        </div>
 
-        {images && (
-          <WallpaperField
-            current={images.wallpaper}
-            pending={wallpaper}
-            onChange={setWallpaper}
-            mode={wallpaperMode}
-            onModeChange={setWallpaperMode}
-            disabled={pending}
-            error={imageErrors.wallpaper}
-            background={bg}
+          {images && (
+            <MemberImageField
+              field="titleImage"
+              label="Title Image"
+              current={images.titleImage}
+              pending={titleImage}
+              onChange={setTitleImage}
+              disabled={pending}
+              error={imageErrors.titleImage}
+              alt={values.title.trim() || defaults.title}
+              background={bg}
+              previewClassName="title-image-preview"
+              hint="Your title will be used as the alt text for the image. It replaces the text title across the top of your page. Wide images work best, like 738×60, shown up to 150px tall."
+            />
+          )}
+
+          <fieldset className="field">
+            <legend>Location</legend>
+            <label htmlFor="country">Country</label>
+            <select id="country" name="country" value={values.country} onChange={(e) => set("country")(e.target.value)}>
+              <option value="">Not shown</option>
+              {countries.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {errors.country && <p className="field-error">{errors.country}</p>}
+
+            {values.country && (
+              <>
+                <label htmlFor="region">
+                  {regionLabel(values.country)}
+                  {!regions && <span className="optional"> (optional)</span>}
+                </label>
+                {regions ? (
+                  <select id="region" name="region" value={values.region} onChange={(e) => set("region")(e.target.value)}>
+                    <option value="">Not shown</option>
+                    {regions.map((r) => (
+                      <option key={r.code} value={r.code}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id="region"
+                    name="region"
+                    type="text"
+                    value={values.region}
+                    onChange={(e) => set("region")(e.target.value)}
+                  />
+                )}
+                {errors.region && <p className="field-error">{errors.region}</p>}
+
+                <label htmlFor="locality">
+                  City or town <span className="optional">(optional)</span>
+                </label>
+                <input
+                  id="locality"
+                  name="locality"
+                  type="text"
+                  value={values.locality}
+                  onChange={(e) => set("locality")(e.target.value)}
+                />
+                {errors.locality && <p className="field-error">{errors.locality}</p>}
+              </>
+            )}
+          </fieldset>
+
+          <ColorField
+            id="backgroundColor"
+            label="Background color"
+            value={values.backgroundColor}
+            fallback={defaults.backgroundColor}
+            error={errors.backgroundColor}
+            onChange={set("backgroundColor")}
           />
-        )}
+          <ColorField
+            id="textColor"
+            label="Text color"
+            value={values.textColor}
+            fallback={defaults.textColor}
+            error={errors.textColor}
+            onChange={set("textColor")}
+          />
+          <ColorField
+            id="linkColor"
+            label="Link color"
+            value={values.linkColor}
+            fallback={fg}
+            error={errors.linkColor}
+            onChange={set("linkColor")}
+          />
+          <p className="hint">Leave the link color blank to match the text. Links show in the text color when hovered.</p>
+
+          <div className="field">
+            <span className="label">Preview</span>
+            <div className="member-preview" style={{ backgroundColor: bg, color: fg }}>
+              <strong>{values.title.trim() || defaults.title}</strong>
+              {previewLocation && <span>{previewLocation}</span>}
+              <span style={{ color: link, textDecoration: "underline" }}>A link</span>
+            </div>
+            {Math.min(ratio, linkRatio) < MIN_CONTRAST && (
+              <p className="warning" role="status">
+                These colors may be hard to read (contrast {Math.min(ratio, linkRatio).toFixed(1)}:1; at least {MIN_CONTRAST}:1 is
+                recommended). You can still save them.
+              </p>
+            )}
+          </div>
+
+          {images && (
+            <WallpaperField
+              current={images.wallpaper}
+              pending={wallpaper}
+              onChange={setWallpaper}
+              mode={wallpaperMode}
+              onModeChange={setWallpaperMode}
+              disabled={pending}
+              error={imageErrors.wallpaper}
+              background={bg}
+            />
+          )}
+
+        </fieldset>
 
         {state.status === "error" && state.message && (
           <p className="error" role="alert">
