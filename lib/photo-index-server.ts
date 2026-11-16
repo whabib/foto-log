@@ -3,7 +3,7 @@ import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { getDb, withTryLock } from "@/lib/db";
 import { appState, member, photoIndex } from "@/lib/db/schema";
 import { resolveActor } from "@/lib/identity";
-import { DEFAULT_JETSTREAM_URL, eventTimeUs, jetstreamUrl, photoChange } from "@/lib/jetstream";
+import { DEFAULT_JETSTREAM_URL, eventTimeUs, identityChange, jetstreamUrl, photoChange } from "@/lib/jetstream";
 import { assertValidPhotoRecord, type PhotoRecord } from "@/lib/photo-record";
 import { scanPhotos } from "@/lib/photos/server";
 
@@ -96,8 +96,21 @@ export async function backfillMember(did: string): Promise<boolean> {
     // Only a repo far past one photo a day gets here: keep what was read, delete nothing.
     console.warn("Backfill stopped at its page limit", { did, pages: MAX_BACKFILL_PAGES });
   }
-  await db.update(member).set({ backfilledAt: new Date() }).where(eq(member.did, did));
+  await db.update(member).set({ backfilledAt: new Date(), handle: actor.handle }).where(eq(member.did, did));
   return true;
+}
+
+/** Records a member's current handle, as seen at sign-in or after a handle change. */
+export async function rememberHandle(did: string, handle: string | null): Promise<void> {
+  const db = await getDb();
+  await db.update(member).set({ handle }).where(eq(member.did, did));
+}
+
+/** Re-resolves a member's handle after Jetstream reports an identity change. */
+async function refreshHandle(did: string): Promise<void> {
+  const actor = await resolveActor(did);
+  // Don't clear a handle because resolution failed for a moment.
+  if (actor) await rememberHandle(did, actor.handle);
 }
 
 /** How long sign-in waits for a new member's backfill; the indexer finishes it otherwise. */
@@ -212,6 +225,9 @@ async function catchUp(): Promise<CatchUpResult> {
   const startUs = Date.now() * 1000;
   const saved = await readCursor();
   let cursor = saved ?? startUs - FIRST_CURSOR_LOOKBACK_US;
+  const db = await getDb();
+  // Identity events cover the whole network; only members' handle changes matter.
+  const members = new Set((await db.select({ did: member.did }).from(member)).map((m) => m.did));
   const ws = new WebSocket(jetstreamUrl(process.env.JETSTREAM_URL ?? DEFAULT_JETSTREAM_URL, cursor));
   let events = 0;
   let changes = 0;
@@ -247,6 +263,8 @@ async function catchUp(): Promise<CatchUpResult> {
       events++;
       const t = eventTimeUs(event);
       const change = photoChange(event);
+      const handleChange = identityChange(event);
+      const handleDid = handleChange && members.has(handleChange) ? handleChange : null;
       queue = queue
         .then(async () => {
           if (failed) return;
@@ -255,6 +273,7 @@ async function catchUp(): Promise<CatchUpResult> {
             if (change.kind === "delete") await unindexPhoto(change.did, change.rkey);
             else await applyPut(change.did, change.rkey, change.cid, change.record);
           }
+          if (handleDid) await refreshHandle(handleDid);
           if (t !== null && t > cursor) cursor = t;
         })
         .catch((err: unknown) => {

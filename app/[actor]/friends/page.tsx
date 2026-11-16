@@ -38,7 +38,7 @@ export default async function FriendsPage({ params, searchParams }: Props) {
   const isOwner = user?.did === owner.did;
   return (
     <MemberFrame owner={owner} look={memberPageLook(settings, owner)} images={images} signedIn={user !== null}>
-      {/* Reading every friend's newest photo can take a while, so the list streams in. */}
+      {/* A long list takes a while to read from the PDS, so it streams in. */}
       <Suspense key={sort} fallback={<p className="friends-page rail-empty">Loading Friends/Favorites…</p>}>
         <LoadedFriendsList owner={owner} sort={sort} isOwner={isOwner} />
       </Suspense>

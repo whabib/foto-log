@@ -67,6 +67,8 @@ export type MemberPageProps = {
   signedIn: boolean;
   /** Whether the owner is on the signed-in viewer's Friends/Favorites; null when there's no toggle to show. */
   onViewerList?: boolean | null;
+  /** Whether the page's owner is a foto-log member, so the viewer can add them. */
+  canAdd?: boolean;
   /** The right column, which streams in. Pages that render statically can pass it in place of the live one. */
   friends?: ReactNode;
 };
@@ -84,7 +86,9 @@ export default function MemberPage(props: MemberPageProps) {
             ) : (
               <>
                 <NoPhotos isOwner={isOwner} />
-                {props.onViewerList != null && <FriendButton did={owner.did} onList={props.onViewerList} />}
+                {props.onViewerList != null && (
+                  <FriendButton did={owner.did} onList={props.onViewerList} canAdd={props.canAdd} handle={owner.handle} />
+                )}
               </>
             )}
           </main>
@@ -222,6 +226,7 @@ function CenterPhoto({
   signedIn,
   signBlocked,
   onViewerList,
+  canAdd,
 }: MemberPageProps & { photo: StoredPhoto }) {
   const { record } = photo;
   const bskyUrl = blueskyPostUrl(record.post.uri);
@@ -270,7 +275,7 @@ function CenterPhoto({
         {" | "}
         <ShareButton url={`${baseUrl}${permalink}`} title={record.caption ?? formatDay(record.displayDate)} />
       </p>
-      {onViewerList != null && <FriendButton did={owner.did} onList={onViewerList} />}
+      {onViewerList != null && <FriendButton did={owner.did} onList={onViewerList} canAdd={canAdd} handle={owner.handle} />}
 
       <div className="photo-text">
         {record.caption && <h2 className="caption">{record.caption}</h2>}

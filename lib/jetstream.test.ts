@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eventTimeUs, jetstreamUrl, photoChange } from "./jetstream";
+import { eventTimeUs, identityChange, jetstreamUrl, photoChange } from "./jetstream";
 
 const did = "did:plc:abcdefghijklmnopqrstuvwx";
 
@@ -45,5 +45,16 @@ describe("eventTimeUs", () => {
     expect(eventTimeUs({ time_us: 1700000000000000 })).toBe(1700000000000000);
     expect(eventTimeUs({ time_us: "1" })).toBeNull();
     expect(eventTimeUs({})).toBeNull();
+  });
+});
+
+describe("identityChange", () => {
+  it("returns the DID of an identity event", () => {
+    expect(identityChange({ kind: "identity", did: "did:plc:abc", identity: { handle: "a.test" } })).toBe("did:plc:abc");
+  });
+  it("ignores other events", () => {
+    expect(identityChange({ kind: "commit", did: "did:plc:abc" })).toBeNull();
+    expect(identityChange({ kind: "account", did: "did:plc:abc" })).toBeNull();
+    expect(identityChange(null)).toBeNull();
   });
 });

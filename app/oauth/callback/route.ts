@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createUserSession, lookupHandle, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { welcomeNewMember } from "@/lib/friends-server";
-import { backfillOnSignIn } from "@/lib/photo-index-server";
+import { backfillOnSignIn, rememberHandle } from "@/lib/photo-index-server";
 import { memberPath } from "@/lib/photos/urls";
 import {
   callbackErrorDetails,
@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
     const cookie = await createUserSession(session.did, handle);
     if (!cookie) return redirectTo("/login?error=failed");
     await welcomeNewMember({ did: session.did, handle });
+    await rememberHandle(session.did, handle).catch((err) => console.warn("Couldn't record handle", { err }));
     await backfillOnSignIn(session.did);
     // Members land on their own fotolog.
     const response = redirectTo(memberPath({ did: session.did, handle }));
