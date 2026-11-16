@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const ACCOUNT_COOKIE = "fotolog_account";
+// Matches PAGE_ACCOUNT_HEADER in lib/auth.ts.
+const PAGE_ACCOUNT_HEADER = "x-fotolog-account";
 
 function cookieAccount(): string | null {
   for (const part of document.cookie.split("; ")) {
@@ -13,13 +15,34 @@ function cookieAccount(): string | null {
 }
 
 /**
- * Notices when another tab switched this browser to a different account,
- * and covers the page until it's reloaded, so nothing here is posted,
- * saved or signed as the wrong account. Checks when the tab comes back
- * into view and before any form is submitted or button pressed.
+ * Keeps a tab from acting as an account it wasn't shown for, after another
+ * tab switched this browser to a different account.
+ *
+ * - Every request this page makes to foto-log (Server Actions and API
+ *   calls) says which account the page was shown for; the server treats a
+ *   mismatch as signed out, so even a save already under way can't write
+ *   to the other account.
+ * - When the tab comes back into view, or something is clicked or
+ *   submitted, it checks for a switch and covers the page with a dialog
+ *   until it's reloaded.
  */
 export default function AccountWatcher({ did }: { did: string }) {
   const [switched, setSwitched] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const original = window.fetch;
+    window.fetch = (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
+      if (url.origin !== window.location.origin) return original(input, init);
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      headers.set(PAGE_ACCOUNT_HEADER, did);
+      return original(input, { ...init, headers });
+    };
+    return () => {
+      window.fetch = original;
+    };
+  }, [did]);
 
   useEffect(() => {
     // Sessions from before multiple accounts have no cookie yet: nothing to compare.
@@ -30,9 +53,8 @@ export default function AccountWatcher({ did }: { did: string }) {
     const check = () => {
       if (isSwitched()) setSwitched(true);
     };
-    // Some actions run from a button's click rather than a form submit.
     const beforeAct = (e: Event) => {
-      if ((e.target as Element | null)?.closest?.(".account-switched")) return;
+      if ((e.target as Element | null)?.closest?.("dialog.account-switched")) return;
       if (!isSwitched()) return;
       e.preventDefault();
       e.stopPropagation();
@@ -56,17 +78,25 @@ export default function AccountWatcher({ did }: { did: string }) {
     };
   }, [did]);
 
+  // A modal dialog sits above everything (other open dialogs included) and keeps focus inside it.
+  useEffect(() => {
+    const d = dialog.current;
+    if (switched && d && !d.open) d.showModal();
+  }, [switched]);
+
   if (!switched) return null;
   return (
-    <div className="account-switched" role="alertdialog" aria-modal="true" aria-labelledby="account-switched-text">
-      <div>
-        <p id="account-switched-text">
-          You switched accounts in another tab. Reload this page to continue as that account.
-        </p>
-        <button type="button" onClick={() => window.location.reload()} autoFocus>
-          Reload
-        </button>
-      </div>
-    </div>
+    <dialog
+      ref={dialog}
+      className="account-switched"
+      aria-labelledby="account-switched-text"
+      // Escape would leave the stale page usable; the only way out is Reload.
+      onCancel={(e) => e.preventDefault()}
+    >
+      <p id="account-switched-text">You switched accounts in another tab. Reload this page to continue as that account.</p>
+      <button type="button" onClick={() => window.location.reload()} autoFocus>
+        Reload
+      </button>
+    </dialog>
   );
 }

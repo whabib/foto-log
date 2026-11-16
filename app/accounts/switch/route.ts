@@ -1,5 +1,6 @@
 import { switchAccount } from "@/lib/auth";
 import { primaryName } from "@/lib/fotolog-name-server";
+import { resolveActor } from "@/lib/identity";
 import { memberPath } from "@/lib/photos/urls";
 import { isSameOrigin, seeOther } from "@/lib/same-origin";
 
@@ -9,6 +10,10 @@ export async function POST(request: Request) {
   const did = String((await request.formData()).get("did") ?? "");
   const account = did ? await switchAccount(did) : null;
   if (!account) return seeOther("/accounts?error=gone");
-  const name = await primaryName(account.did).catch(() => null);
-  return seeOther(memberPath({ did: account.did, handle: account.handle, name }));
+  // The handle saved at sign-in may be out of date; use the verified one, or the DID.
+  const [name, actor] = await Promise.all([
+    primaryName(account.did).catch(() => null),
+    resolveActor(account.did).catch(() => null),
+  ]);
+  return seeOther(memberPath({ did: account.did, handle: actor?.handle ?? null, name }));
 }

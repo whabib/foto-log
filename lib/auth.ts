@@ -1,7 +1,7 @@
 import "server-only";
 import type { OAuthSession } from "@atproto/oauth-client-node";
 import { and, count, desc, eq, gt, isNull, or } from "drizzle-orm";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { isProduction } from "@/lib/config";
 import { randomId, sign, unsign } from "@/lib/crypto";
 import { getDb, withLock } from "@/lib/db";
@@ -114,7 +114,8 @@ export async function signInOnBrowser(did: string, handle: string | null): Promi
       .set({ browserId })
       .where(and(eq(userSession.id, currentId), isNull(userSession.browserId)));
   }
-  const result = await withLock(accountLock(did), async (): Promise<SignInResult | { ok: true; id: string }> => {
+  // The browser lock keeps two sign-ins finishing at once from both fitting under the cap.
+  const result = await withLock(`browser:${browserId}`, () => withLock(accountLock(did), async (): Promise<SignInResult | { ok: true; id: string }> => {
     const [tokens] = await db.select({ sub: oauthSession.sub }).from(oauthSession).where(eq(oauthSession.sub, did));
     if (!tokens) return { ok: false, reason: "gone" };
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
@@ -135,7 +136,7 @@ export async function signInOnBrowser(did: string, handle: string | null): Promi
     const id = randomId();
     await db.insert(userSession).values({ id, did, handle, browserId, expiresAt });
     return { ok: true, id };
-  });
+  }));
   if (!result.ok) {
     if (result.reason === "full") await revokeIfUnused(did);
     return result;
@@ -154,6 +155,13 @@ async function currentSessionId(): Promise<string | null> {
   return raw ? unsign(raw) : null;
 }
 
+/**
+ * Sent by pages' own requests (see AccountWatcher): the account the page
+ * was shown for. Requests from a tab left on another account are treated
+ * as signed out, so they can't act as the account switched to elsewhere.
+ */
+export const PAGE_ACCOUNT_HEADER = "x-fotolog-account";
+
 /** The signed-in user for this request, or null. */
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const id = await currentSessionId();
@@ -163,7 +171,10 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     .select({ did: userSession.did, handle: userSession.handle })
     .from(userSession)
     .where(and(eq(userSession.id, id), live()));
-  return row ?? null;
+  if (!row) return null;
+  const pageAccount = (await headers()).get(PAGE_ACCOUNT_HEADER);
+  if (pageAccount && pageAccount !== row.did) return null;
+  return row;
 }
 
 export type BrowserAccount = { sessionId: string; did: string; handle: string | null; current: boolean };

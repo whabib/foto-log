@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       const state = parseSignInState(details.state);
       // Servers without PAR report a scope problem here instead of up front.
       if (error === "invalid_scope" && state && state.tier < LAST_TIER) {
-        const url = await startSignIn(state.input, state.tier + 1).catch(() => null);
+        const url = await startSignIn(state.input, state.tier + 1, { selectAccount: state.selectAccount }).catch(() => null);
         if (url) return NextResponse.redirect(url, 303);
       }
       if (error === "access_denied") return redirectTo("/login?error=denied");

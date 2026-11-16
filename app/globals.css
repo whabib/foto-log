@@ -1535,22 +1535,17 @@ body:has(.member-theme) .account-menu li button:hover {
 
 /* Covers a tab whose account was switched in another tab, so it can't act as the wrong one. */
 .account-switched {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: rgb(0 0 0 / 0.5);
-}
-
-.account-switched > div {
   max-width: 420px;
   padding: 24px;
+  border: none;
   border-radius: 8px;
   background: var(--bg);
   color: var(--fg);
   box-shadow: 0 8px 32px rgb(0 0 0 / 0.3);
+}
+
+.account-switched::backdrop {
+  background: rgb(0 0 0 / 0.5);
 }
 
 .account-switched p {
