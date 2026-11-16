@@ -4,8 +4,7 @@ import type { CurrentUser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { resolveActor, type Actor } from "@/lib/identity";
 import { primaryName } from "@/lib/fotolog-name-server";
-import { withLock } from "@/lib/db";
-import { getGroup, membership } from "@/lib/groups-server";
+import { claimGroupPost, getGroup, membership, releaseGroupPost } from "@/lib/groups-server";
 import { getOAuthClient } from "@/lib/oauth/client";
 import { fetchFromPds } from "@/lib/safe-fetch";
 import {
@@ -203,7 +202,8 @@ export async function postPhoto(
   opts: { groupDid?: string } = {},
 ): Promise<string> {
   const now = new Date();
-  const groupDid = opts.groupDid;
+  // A group posting on its own takes the group's way too, so it shares the day's keys.
+  const groupDid = opts.groupDid ?? ((await getGroup(user.did)) ? user.did : undefined);
   if (groupDid) await groupCheck(user, groupDid);
   const repo = groupDid ?? user.did;
   const uploadDate = isValidTimeZone(input.timeZone) ? dateKeyFor(now, input.timeZone) : "";
@@ -236,30 +236,29 @@ export async function postPhoto(
     return path;
   }
 
-  // One post to a group at a time, so two members can't take the same key
-  // and one member can't post twice by double-submitting.
-  return withLock(`group-post:${groupDid}`, async () => {
-    const day = await groupDay(agent, groupDid, uploadDate);
-    const mine = day.find((p) => p.uploader === user.did);
-    if (mine) {
-      throw new PhotoError(
-        "already_posted",
-        "You've already posted to this group today.",
-        photoKeyPath(identity, mine.rkey),
-      );
-    }
-    const rkey = nextPhotoRecordKey(
-      uploadDate,
-      day.map((p) => p.sequence),
-      GROUP_DAILY_LIMIT,
-    );
-    if (!rkey) {
-      throw new PhotoError("day_full", `This group has had its ${GROUP_DAILY_LIMIT} photos today. Try again tomorrow.`);
-    }
+  const day = await groupDay(agent, groupDid, uploadDate);
+  const mine = day.find((p) => p.uploader === user.did);
+  if (mine) {
+    throw new PhotoError("already_posted", "You've already posted to this group today.", photoKeyPath(identity, mine.rkey));
+  }
+  // Keys go up through the day, after every photo posted or being posted,
+  // so key order stays upload order even after a delete.
+  const claim = await claimGroupPost(groupDid, uploadDate, user.did, Math.max(0, ...day.map((p) => p.sequence)));
+  if (claim === "busy") {
+    throw new PhotoError("already_posted", "Your photo for this group is already being posted.");
+  }
+  if (claim === "full" || claim > GROUP_DAILY_LIMIT) {
+    if (typeof claim === "number") await releaseGroupPost(groupDid, uploadDate, user.did);
+    throw new PhotoError("day_full", `This group has had its ${GROUP_DAILY_LIMIT} photos today. Try again tomorrow.`);
+  }
+  try {
+    const rkey = photoRecordKey(uploadDate, claim);
     const path = photoKeyPath(identity, rkey);
     await writePhoto(agent, repo, rkey, path, input, now, groupDid === user.did ? undefined : user.did);
     return path;
-  });
+  } finally {
+    await releaseGroupPost(groupDid, uploadDate, user.did);
+  }
 }
 
 /**
@@ -371,6 +370,7 @@ export async function todaysPhotoPath(
 ): Promise<string | null> {
   if (!isValidTimeZone(timeZone)) throw new PhotoError("invalid", "Unknown time zone.");
   const uploadDate = dateKeyFor(new Date(), timeZone);
+  groupDid ??= (await getGroup(user.did)) ? user.did : undefined;
   if (groupDid) {
     await groupCheck(user, groupDid);
     const identity = await currentIdentity({ did: groupDid, handle: null });

@@ -1,4 +1,4 @@
-import { boolean, index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, primaryKey, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 /** In-progress OAuth authorizations. Values are encrypted; rows expire after an hour. */
 export const oauthState = pgTable(
@@ -123,4 +123,25 @@ export const groupMember = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.groupDid, t.memberDid] }), index("group_member_member_idx").on(t.memberDid)],
+);
+
+/**
+ * A member's post to a group while it's being written to the group's repo.
+ * Keeps two uploads from taking the same record key, and one member from
+ * posting twice at once; the row goes once the write is done, since the
+ * repo is the record of what was posted. Rows left by a crash expire.
+ */
+export const groupPostClaim = pgTable(
+  "group_post_claim",
+  {
+    groupDid: text("group_did").notNull(),
+    uploadDate: text("upload_date").notNull(),
+    memberDid: text("member_did").notNull(),
+    sequence: integer("sequence").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.groupDid, t.uploadDate, t.memberDid] }),
+    unique("group_post_claim_sequence").on(t.groupDid, t.uploadDate, t.sequence),
+  ],
 );

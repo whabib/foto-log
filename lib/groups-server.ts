@@ -1,9 +1,9 @@
 import "server-only";
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, lt, max, sql } from "drizzle-orm";
 import { cache } from "react";
 import type { CurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { fotologGroup, groupMember, member } from "@/lib/db/schema";
+import { fotologGroup, groupMember, groupPostClaim, member } from "@/lib/db/schema";
 
 export type JoinPolicy = "open" | "approval";
 export type Group = { did: string; joinPolicy: JoinPolicy };
@@ -70,35 +70,35 @@ export class GroupError extends Error {}
 
 /**
  * Joins `user` to the group, or asks to when it approves members. Returns
- * their standing afterwards; joining twice changes nothing.
+ * their standing afterwards; joining twice changes nothing. Reads the
+ * policy under a lock on the group's row, so a policy change can't slip in
+ * between, and counts the member's groups under a lock on the member, so
+ * two joins at once can't pass the limit together.
  */
 export async function joinGroup(user: CurrentUser, groupDid: string): Promise<MembershipStatus> {
   if (user.did === groupDid) throw new GroupError("A group can't join itself.");
-  const group = await getGroup(groupDid);
-  if (!group) throw new GroupError("That account isn't a group.");
   const db = await getDb();
-  const [{ n }] = await db.select({ n: count() }).from(groupMember).where(eq(groupMember.memberDid, user.did));
-  if (n >= MAX_GROUPS_PER_MEMBER) {
-    throw new GroupError(`You can be in up to ${MAX_GROUPS_PER_MEMBER} groups. Leave one to join another.`);
-  }
-  const status: MembershipStatus = group.joinPolicy === "open" ? "member" : "pending";
-  const [row] = await db
-    .insert(groupMember)
-    .values({ groupDid, memberDid: user.did, status })
-    .onConflictDoNothing()
-    .returning({ status: groupMember.status });
-  if (row) return status;
-  return (await currentStatus(groupDid, user.did)) ?? status;
-}
-
-async function currentStatus(groupDid: string, memberDid: string): Promise<MembershipStatus | null> {
-  const db = await getDb();
-  const [row] = await db
-    .select({ status: groupMember.status })
-    .from(groupMember)
-    .where(and(eq(groupMember.groupDid, groupDid), eq(groupMember.memberDid, memberDid)))
-    .limit(1);
-  return row ? (row.status === "member" ? "member" : "pending") : null;
+  return db.transaction(async (tx) => {
+    const [group] = await tx
+      .select({ joinPolicy: fotologGroup.joinPolicy })
+      .from(fotologGroup)
+      .where(eq(fotologGroup.did, groupDid))
+      .for("share");
+    if (!group) throw new GroupError("That account isn't a group.");
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`group-join:${user.did}`}, 0))`);
+    const [existing] = await tx
+      .select({ status: groupMember.status })
+      .from(groupMember)
+      .where(and(eq(groupMember.groupDid, groupDid), eq(groupMember.memberDid, user.did)));
+    if (existing) return existing.status === "member" ? "member" : "pending";
+    const [{ n }] = await tx.select({ n: count() }).from(groupMember).where(eq(groupMember.memberDid, user.did));
+    if (n >= MAX_GROUPS_PER_MEMBER) {
+      throw new GroupError(`You can be in up to ${MAX_GROUPS_PER_MEMBER} groups. Leave one to join another.`);
+    }
+    const status: MembershipStatus = asPolicy(group.joinPolicy) === "open" ? "member" : "pending";
+    await tx.insert(groupMember).values({ groupDid, memberDid: user.did, status });
+    return status;
+  });
 }
 
 /** Takes `memberDid` out of the group, or withdraws their request. */
@@ -169,4 +169,60 @@ export async function groupsOf(memberDid: string): Promise<string[]> {
     .from(groupMember)
     .where(and(eq(groupMember.memberDid, memberDid), eq(groupMember.status, "member")));
   return rows.map((r) => r.did);
+}
+
+/** How long a claim may sit before it's taken as left behind by a crash. */
+const CLAIM_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Claims the next record key of `uploadDate` on the group for `memberDid`:
+ * one past `lastSequence` (the day's highest key in the repo) and past any
+ * other post in progress. Returns the sequence number, "busy" if this
+ * member is already posting to the group, or "full" when the day's keys
+ * have run out. Release it with releaseGroupPost once the write is done.
+ */
+export async function claimGroupPost(
+  groupDid: string,
+  uploadDate: string,
+  memberDid: string,
+  lastSequence: number,
+): Promise<number | "busy" | "full"> {
+  const db = await getDb();
+  await db
+    .delete(groupPostClaim)
+    .where(and(eq(groupPostClaim.groupDid, groupDid), lt(groupPostClaim.createdAt, new Date(Date.now() - CLAIM_TTL_MS))));
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const [row] = await db
+      .select({ top: max(groupPostClaim.sequence) })
+      .from(groupPostClaim)
+      .where(and(eq(groupPostClaim.groupDid, groupDid), eq(groupPostClaim.uploadDate, uploadDate)));
+    const sequence = Math.max(lastSequence, row?.top ?? 0) + 1;
+    if (sequence > 99) return "full";
+    try {
+      await db.insert(groupPostClaim).values({ groupDid, uploadDate, memberDid, sequence });
+      return sequence;
+    } catch (err) {
+      const constraint = (err as { constraint?: string; cause?: { constraint?: string } }).cause?.constraint ??
+        (err as { constraint?: string }).constraint;
+      if (constraint === "group_post_claim_sequence") continue; // someone took it: try the next
+      if (constraint?.endsWith("_pk")) return "busy";
+      throw err;
+    }
+  }
+  return "busy";
+}
+
+/** Drops a claim made by claimGroupPost. */
+export async function releaseGroupPost(groupDid: string, uploadDate: string, memberDid: string): Promise<void> {
+  const db = await getDb();
+  await db
+    .delete(groupPostClaim)
+    .where(
+      and(
+        eq(groupPostClaim.groupDid, groupDid),
+        eq(groupPostClaim.uploadDate, uploadDate),
+        eq(groupPostClaim.memberDid, memberDid),
+      ),
+    )
+    .catch((err) => console.warn("Couldn't release a group post claim; it expires", { groupDid, err }));
 }

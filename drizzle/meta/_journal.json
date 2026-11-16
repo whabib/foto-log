@@ -64,6 +64,13 @@
       "when": 1794859786360,
       "tag": "0008_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794860887376,
+      "tag": "0009_group_post_claim",
+      "breakpoints": true
     }
   ]
 }

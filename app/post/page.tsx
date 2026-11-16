@@ -15,7 +15,9 @@ export default async function PostPage({ searchParams }: PageProps<"/post">) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const { group: groupParam } = await searchParams;
-  const groupDid = typeof groupParam === "string" && groupParam ? groupParam : null;
+  // A group posting on its own goes through the group's daily keys and limits too.
+  const groupDid =
+    typeof groupParam === "string" && groupParam ? groupParam : (await getGroup(user.did)) ? user.did : null;
 
   if (groupDid) {
     if (!isValidDid(groupDid)) notFound();
