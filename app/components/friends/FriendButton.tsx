@@ -12,9 +12,10 @@ function inviteUrl(handle: string | null): string {
 }
 
 /**
- * "Add to Friends/Favorites" or "Remove from Friends/Favorites" under
- * another member's photo, or a short "Remove" on a row of the full list.
- * For someone who hasn't joined foto-log, an invite instead of Add.
+ * "Add to Friends/Favorites" or "Remove from Friends/Favorites" at the
+ * right end of the links under another member's photo (`inline`), on its
+ * own line when there's no photo, or a short "Remove" on a row of the full
+ * list. For someone who hasn't joined foto-log, an invite instead of Add.
  */
 export default function FriendButton({
   did,
@@ -22,21 +23,25 @@ export default function FriendButton({
   short = false,
   canAdd = true,
   handle = null,
+  inline = false,
 }: {
   did: string;
   onList: boolean;
   short?: boolean;
   canAdd?: boolean;
   handle?: string | null;
+  /** In the row of links under a photo, where the owner's Delete photo goes. */
+  inline?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<Extract<FriendState, { status: "error" }> | null>(null);
   const label = short ? (onList ? "Remove" : "Add") : onList ? "Remove from Friends/Favorites" : "Add to Friends/Favorites";
-  const Wrapper = short ? "span" : "p";
+  const Wrapper = short || inline ? "span" : "p";
+  const className = short ? "friend-toggle-short" : inline ? "photo-util-end" : "friend-toggle";
   if (!onList && !canAdd) {
     return (
-      <Wrapper className={short ? "friend-toggle-short" : "friend-toggle"}>
+      <Wrapper className={className}>
         <a href={inviteUrl(handle)} target="_blank" rel="noopener noreferrer">
           Invite this person to Fotolog!
         </a>
@@ -44,7 +49,7 @@ export default function FriendButton({
     );
   }
   return (
-    <Wrapper className={short ? "friend-toggle-short" : "friend-toggle"}>
+    <Wrapper className={className}>
       <button
         type="button"
         className="link-button"

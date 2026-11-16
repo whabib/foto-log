@@ -573,8 +573,9 @@ body:has(.member-theme) .account-menu li button:hover {
   margin: 0;
 }
 
-/* Flush with the photo's right edge. */
-.photo-delete {
+/* Delete photo, or Add/Remove Friends/Favorites: flush with the photo's right edge. */
+.photo-delete,
+.photo-util-end {
   margin-left: auto;
 }
 
@@ -599,10 +600,6 @@ body:has(.member-theme) .account-menu li button:hover {
 .friend-toggle {
   margin: -8px 0 16px;
   font-size: 0.875rem;
-}
-
-.member-theme .friend-toggle .link-button {
-  font-weight: 600;
 }
 
 /* The same size as the Recent Photos thumbnails, which fill the 150px left column. */
