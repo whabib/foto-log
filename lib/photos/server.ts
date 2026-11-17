@@ -20,7 +20,7 @@ import {
   photoRecordKey,
   type PhotoRecord,
 } from "@/lib/photo-record";
-import { buildPostText, graphemeLength, maxCaptionGraphemes } from "./text";
+import { buildPostText, graphemeLength, maxCaptionGraphemes, type PostCredit } from "./text";
 import { photoKeyPath, photoPath } from "./urls";
 
 const POST_COLLECTION = "app.bsky.feed.post";
@@ -106,9 +106,10 @@ export function photoUrlFor(identity: Identity, uploadDate: string): string {
 
 /**
  * Checks a photo before upload. `photoUrl` is the longest link the Bluesky
- * post could carry, which bounds the caption.
+ * post could carry, and `credit` the uploader named in a group's post; both
+ * bound the caption.
  */
-export function validatePhotoInput(photoUrl: string, input: PhotoInput) {
+export function validatePhotoInput(photoUrl: string, input: PhotoInput, credit?: PostCredit | null) {
   if (!ACCEPTED_TYPES.has(input.mimeType)) {
     throw new PhotoError("invalid", "Please choose a JPEG, PNG or WebP image.");
   }
@@ -124,13 +125,13 @@ export function validatePhotoInput(photoUrl: string, input: PhotoInput) {
     throw new PhotoError("invalid", "We couldn't tell your time zone. Please try again.");
   }
   const caption = input.caption.trim();
-  const maxCaption = maxCaptionGraphemes(photoUrl);
+  const maxCaption = maxCaptionGraphemes(photoUrl, credit?.handle);
   if (graphemeLength(caption) > maxCaption) {
     throw new PhotoError("invalid", `Captions can be up to ${maxCaption} characters.`);
   }
   if (
     utf8Length(caption) > MAX_CAPTION_BYTES ||
-    utf8Length(buildPostText(caption, photoUrl).text) > MAX_POST_TEXT_BYTES
+    utf8Length(buildPostText(caption, photoUrl, credit).text) > MAX_POST_TEXT_BYTES
   ) {
     throw new PhotoError("invalid", "That caption is too long. Try a shorter one or fewer emoji.");
   }
@@ -208,8 +209,14 @@ export async function postPhoto(
   if (groupDid) await groupCheck(user, groupDid);
   const repo = groupDid ?? user.did;
   const uploadDate = isValidTimeZone(input.timeZone) ? dateKeyFor(now, input.timeZone) : "";
-  const identity = await currentIdentity({ did: repo, handle: null });
-  validatePhotoInput(longestPhotoUrl(identity, Boolean(groupDid)), input);
+  // A member's photo on a group names them in the group's Bluesky post.
+  const byMember = groupDid !== undefined && groupDid !== user.did;
+  const [identity, uploader] = await Promise.all([
+    currentIdentity({ did: repo, handle: null }),
+    byMember ? currentIdentity(user) : null,
+  ]);
+  const credit: PostCredit | null = uploader?.handle ? { did: user.did, handle: uploader.handle } : null;
+  validatePhotoInput(longestPhotoUrl(identity, Boolean(groupDid)), input, credit);
 
   let agent: Agent;
   try {
@@ -255,7 +262,7 @@ export async function postPhoto(
   try {
     const rkey = photoRecordKey(uploadDate, claim);
     const path = photoKeyPath(identity, rkey);
-    await writePhoto(agent, repo, rkey, path, input, now, groupDid === user.did ? undefined : user.did);
+    await writePhoto(agent, repo, rkey, path, input, now, byMember ? { did: user.did, credit } : undefined);
     return path;
   } finally {
     await releaseGroupPost(groupDid, uploadDate, user.did);
@@ -265,6 +272,8 @@ export async function postPhoto(
 /**
  * Uploads the image, then creates the Bluesky post and the photo record at
  * `rkey` in `repo`. If the record can't be written, deletes the post again.
+ * With `by`, it's a member's photo on a group: the record names them, and
+ * the post too when they have a handle.
  */
 async function writePhoto(
   agent: Agent,
@@ -273,15 +282,16 @@ async function writePhoto(
   path: string,
   input: PhotoInput,
   now: Date,
-  uploadedBy?: string,
+  by?: { did: string; credit: PostCredit | null },
 ): Promise<void> {
+  const uploadedBy = by?.did;
   const { data: upload } = await agent.com.atproto.repo.uploadBlob(input.image, {
     encoding: input.mimeType,
   });
   const aspectRatio = { width: input.width, height: input.height };
   const alt = input.alt.trim();
   const caption = input.caption.trim();
-  const { text, facets } = buildPostText(caption, `${baseUrl}${path}`);
+  const { text, facets } = buildPostText(caption, `${baseUrl}${path}`, by?.credit);
 
   const { data: post } = await agent.com.atproto.repo.createRecord({
     repo,

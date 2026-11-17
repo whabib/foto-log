@@ -21,10 +21,12 @@ export default async function PostPage({ searchParams }: PageProps<"/post">) {
 
   if (groupDid) {
     if (!isValidDid(groupDid)) notFound();
-    const [group, groupIdentity, status] = await Promise.all([
+    const [group, groupIdentity, status, me] = await Promise.all([
       getGroup(groupDid),
       currentIdentity({ did: groupDid, handle: null }),
       membership(groupDid, user.did),
+      // A member's post on the group's Bluesky names them, which takes room from the caption.
+      groupDid === user.did ? null : currentIdentity(user),
     ]);
     if (!group) notFound();
     const name = displayName(groupIdentity);
@@ -36,11 +38,11 @@ export default async function PostPage({ searchParams }: PageProps<"/post">) {
           <>
             <p className="muted">
               One photo a day from each member. It goes on the group&apos;s fotolog with your name, and is
-              shared as a post from the group&apos;s Bluesky account. The group takes up to {GROUP_DAILY_LIMIT}{" "}
+              shared as a post from the group&apos;s Bluesky account that names you. The group takes up to {GROUP_DAILY_LIMIT}{" "}
               photos a day.
             </p>
             <PostForm
-              maxCaption={maxCaptionGraphemes(longestPhotoUrl(groupIdentity, true))}
+              maxCaption={maxCaptionGraphemes(longestPhotoUrl(groupIdentity, true), me?.handle)}
               group={{ did: groupDid }}
             />
           </>

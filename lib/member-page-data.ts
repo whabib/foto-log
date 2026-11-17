@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth";
-import { blueskyAvatar } from "@/lib/bsky-profile";
+import { blueskyProfile } from "@/lib/bsky-profile";
 import { primaryNames } from "@/lib/fotolog-name-server";
 import { isMember, isOnList } from "@/lib/friends-server";
 import type { Guestbook } from "@/lib/guestbook/entries";
@@ -25,8 +25,8 @@ function keyForSegment(segment: string): string | null {
   return parsePhotoRecordKey(segment) ? segment : null;
 }
 
-/** A group page's extras: the group, its size, and where the viewer stands. */
-export type GroupInfo = Group & { members: number; viewer: MembershipStatus | null };
+/** A group page's extras: the group, its size, where the viewer stands, and its Bluesky description. */
+export type GroupInfo = Group & { members: number; viewer: MembershipStatus | null; description: string | null };
 
 /**
  * Everything the member page needs. Without `date`, the center photo is the
@@ -41,11 +41,11 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
   const owner = await resolveMemberPage(actorParam, date ? `/${date}` : "");
   if (!owner) return null;
 
-  const [recent, dayPhoto, settings, avatar, user, images, group] = await Promise.all([
+  const [recent, dayPhoto, settings, profile, user, images, group] = await Promise.all([
     listPhotos(owner, { limit: RECENT_PHOTOS }),
     key ? fetchPhoto(owner, key) : Promise.resolve(null),
     getMemberSettings(owner.did),
-    blueskyAvatar(owner.did),
+    blueskyProfile(owner.did),
     getCurrentUser(),
     getMemberImages(owner),
     getGroup(owner.did),
@@ -85,7 +85,7 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
   const [groupInfo, uploader] = await Promise.all([
     group
       ? Promise.all([memberCount(group.did), user ? membership(group.did, user.did) : null]).then(
-          ([members, viewer]): GroupInfo => ({ ...group, members, viewer }),
+          ([members, viewer]): GroupInfo => ({ ...group, members, viewer, description: profile.description }),
         )
       : null,
     photo ? creditFor(owner.did, photo) : null,
@@ -98,7 +98,7 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     guestbook,
     look: memberPageLook(settings, owner),
     images,
-    avatar,
+    avatar: profile.avatar,
     photo,
     recent: rail,
     older,
