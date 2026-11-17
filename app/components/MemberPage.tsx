@@ -139,7 +139,10 @@ export default function MemberPage(props: MemberPageProps) {
               />
             )}
 
-            <h3 className="rail-heading">Recent Photos</h3>
+            {/* The archive page comes later; until then this goes to the latest photo, like View all photos. */}
+            <h3 className="rail-heading">
+              <Link href={memberPath(owner)}>Recent Photos</Link>
+            </h3>
             {recent.length > 0 ? (
               <ul className="recent-photos">
                 {recent.map((p) => (
@@ -170,7 +173,9 @@ export default function MemberPage(props: MemberPageProps) {
                 <FriendsColumn owner={owner} isOwner={isOwner} />
               </Suspense>
             )}
-            <h3 className="rail-heading">Groups</h3>
+            <h3 className="rail-heading">
+              <Link href="/groups">Groups</Link>
+            </h3>
             {props.groups ?? (
               <Suspense fallback={<p className="rail-empty">Loading groups…</p>}>
                 <GroupsColumn owner={owner} isOwner={isOwner} />
