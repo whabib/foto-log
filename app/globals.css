@@ -2013,3 +2013,28 @@ body:has(.member-theme) .account-menu li button:hover {
 .group-settings {
   margin-top: 24px;
 }
+
+/* Settings' Delete Account page. */
+.delete-account ul {
+  margin: -8px 0 0;
+  padding-left: 1.25em;
+}
+
+.delete-account p {
+  margin: 0;
+}
+
+.check-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.check-row input {
+  margin-top: 0.25em;
+}
+
+.settings-form button.danger-button {
+  background: var(--error);
+  color: #fff;
+}

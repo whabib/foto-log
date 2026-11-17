@@ -4,6 +4,7 @@ import { isBanned } from "@/lib/bans-server";
 import { baseUrl } from "@/lib/config";
 import { primaryName } from "@/lib/fotolog-name-server";
 import { welcomeNewMember } from "@/lib/friends-server";
+import { reopenAccount } from "@/lib/account-delete-server";
 import { backfillOnSignIn, rememberHandle } from "@/lib/photo-index-server";
 import { memberPath } from "@/lib/photos/urls";
 import {
@@ -35,6 +36,8 @@ export async function GET(request: NextRequest) {
     const signedIn = await signInOnBrowser(session.did, handle);
     if (!signedIn.ok) return redirectTo(signedIn.reason === "full" ? "/accounts?error=full" : "/login?error=failed");
     const isNew = await welcomeNewMember({ did: session.did, handle });
+    // Back after deleting their foto-log: their pages show again, and their name if it's still held.
+    await reopenAccount(session.did).catch((err) => console.warn("Couldn't reopen an account", { err }));
     await rememberHandle(session.did, handle).catch((err) => console.warn("Couldn't record handle", { err }));
     await backfillOnSignIn(session.did);
     // New members get a word about customizing first.

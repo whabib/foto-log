@@ -99,6 +99,13 @@
       "when": 1794891050474,
       "tag": "0013_ban_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794955863576,
+      "tag": "0014_closed_member",
+      "breakpoints": true
     }
   ]
 }

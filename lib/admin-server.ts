@@ -26,7 +26,7 @@ async function adminDid(admin: string): Promise<string | null> {
   return did;
 }
 
-async function isBuiltInAdmin(did: string): Promise<boolean> {
+export async function isBuiltInAdmin(did: string): Promise<boolean> {
   const dids = await Promise.all(BUILT_IN_ADMINS.map((a) => adminDid(a).catch(() => null)));
   return dids.includes(did);
 }

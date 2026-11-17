@@ -68,7 +68,7 @@ export async function resetSettings() {
 export async function checkFotologName(input: string): Promise<SetNameResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, message: "Please sign in again." };
-  return checkName(String(input).slice(0, 100));
+  return checkName(String(input).slice(0, 100), user.did);
 }
 
 /** Sets the signed-in member's Fotolog name. It can only be done once. */
