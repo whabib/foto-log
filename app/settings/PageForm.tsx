@@ -83,11 +83,15 @@ export default function PageForm({ initial, defaults, location, hasSaved, member
   const [wallpaper, setWallpaper] = useState<PendingImage>(NO_CHANGE);
   const [wallpaperMode, setWallpaperMode] = useState(images?.wallpaperMode ?? "tile");
   const [imageErrors, setImageErrors] = useState<{ titleImage?: ImageError; wallpaper?: ImageError }>({});
+  // Shown after a save until the next edit.
+  const [showSaved, setShowSaved] = useState(false);
   const [state, formAction, pending] = useActionState<SaveState, FormData>(
     async (prev, data) => {
+      setShowSaved(false);
       const result = await saveSettings(prev, data);
       if (result.status !== "saved") return result;
       if (!images) {
+        setShowSaved(true);
         router.push(memberPage);
         return result;
       }
@@ -111,6 +115,7 @@ export default function PageForm({ initial, defaults, location, hasSaved, member
         return { status: "error", errors: {}, message: "Your settings were saved, but an image wasn't. See above." };
       }
       // Everything saved: show the member their page.
+      setShowSaved(true);
       router.push(memberPage);
       return result;
     },
@@ -140,9 +145,9 @@ export default function PageForm({ initial, defaults, location, hasSaved, member
       <p className="error" role="alert">
         {state.message}
       </p>
-    ) : state.status === "saved" ? (
+    ) : state.status === "saved" && showSaved ? (
       <p className="notice-inline" role="status">
-        Saved.
+        Your changes have been saved.
       </p>
     ) : null;
 
@@ -157,6 +162,8 @@ export default function PageForm({ initial, defaults, location, hasSaved, member
           const data = new FormData(e.currentTarget);
           startTransition(() => formAction(data));
         }}
+        // Any edit, typed or picked, clears "saved".
+        onChange={() => setShowSaved(false)}
       >
         {/* Locked while saving, so no edit is made after the values were sent. */}
         <fieldset className="settings-fields" disabled={pending}>
@@ -182,7 +189,10 @@ export default function PageForm({ initial, defaults, location, hasSaved, member
                 label="Title Image"
                 current={images.titleImage}
                 pending={titleImage}
-                onChange={setTitleImage}
+                onChange={(v) => {
+                  setTitleImage(v);
+                  setShowSaved(false);
+                }}
                 disabled={pending}
                 error={imageErrors.titleImage}
                 alt={values.title.trim() || defaults.title}
@@ -238,9 +248,15 @@ export default function PageForm({ initial, defaults, location, hasSaved, member
               <WallpaperField
                 current={images.wallpaper}
                 pending={wallpaper}
-                onChange={setWallpaper}
+                onChange={(v) => {
+                  setWallpaper(v);
+                  setShowSaved(false);
+                }}
                 mode={wallpaperMode}
-                onModeChange={setWallpaperMode}
+                onModeChange={(m) => {
+                  setWallpaperMode(m);
+                  setShowSaved(false);
+                }}
                 disabled={pending}
                 error={imageErrors.wallpaper}
                 background={bg}

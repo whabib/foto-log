@@ -28,12 +28,15 @@ export default function ProfileForm({
     setSavedPrimary(identity.primary);
     setPrimary(identity.primary);
   }
+  // Shown after a save until the next edit.
+  const [showSaved, setShowSaved] = useState(false);
   const [state, formAction, pending] = useActionState<SaveState, FormData>(async (prev, data) => {
     const result = await saveSettings(prev, data);
     if (result.status === "saved") {
       setSaved({ ...values });
       setSavedPrimary(primary);
     }
+    setShowSaved(result.status === "saved");
     return result;
   }, { status: "idle" });
   const set = (field: keyof Values) => (v: string) =>
@@ -58,6 +61,8 @@ export default function ProfileForm({
         const data = new FormData(e.currentTarget);
         startTransition(() => formAction(data));
       }}
+      // Any edit, typed or picked, clears "saved".
+      onChange={() => setShowSaved(false)}
     >
       <input type="hidden" name="section" value="profile" />
       <fieldset className="settings-fields" disabled={pending}>
@@ -124,9 +129,9 @@ export default function ProfileForm({
             {state.message}
           </p>
         )}
-        {state.status === "saved" && !dirty && (
+        {showSaved && (
           <p className="notice-inline" role="status">
-            Saved.
+            Your changes have been saved.
           </p>
         )}
         <button type="submit">{pending ? "Saving…" : "Save"}</button>
