@@ -7,19 +7,14 @@
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** Earliest and latest years the calendar goes to. */
-const MIN_YEAR = 2000;
-const MAX_YEAR = 2100;
-
 const pad = (n: number) => String(n).padStart(2, "0");
+const year4 = (n: number) => String(n).padStart(4, "0");
 
-/** A "YYYY-MM" month, or null if `value` isn't one in range. */
+/** A "YYYY-MM" month, or null. Any four-digit year from 0001, like the photo record's dates. */
 export function parseMonth(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const m = MONTH_RE.exec(value);
-  if (!m) return null;
-  const year = Number(m[1]);
-  return year >= MIN_YEAR && year <= MAX_YEAR ? value : null;
+  return m && Number(m[1]) >= 1 ? value : null;
 }
 
 /** A real "YYYY-MM-DD" day, or null. */
@@ -28,18 +23,21 @@ export function parseDay(value: unknown): string | null {
   const m = DAY_RE.exec(value);
   if (!m) return null;
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (y < MIN_YEAR || y > MAX_YEAR) return null;
-  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (y < 1) return null;
+  const date = utc(value);
   return date.getUTCMonth() === mo - 1 && date.getUTCDate() === d ? value : null;
 }
 
+/** Midnight UTC on `day`. setUTCFullYear keeps years below 100, which Date.UTC would read as 19xx. */
 function utc(day: string): Date {
   const [y, m, d] = day.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
+  const date = new Date(0);
+  date.setUTCFullYear(y, m - 1, d);
+  return date;
 }
 
 function dayKey(date: Date): string {
-  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+  return `${year4(date.getUTCFullYear())}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
 /** The day `n` days after `day` (before, if negative). */
@@ -53,7 +51,7 @@ export function addDays(day: string, n: number): string {
 export function addMonths(month: string, n: number): string {
   const [y, m] = month.split("-").map(Number);
   const total = y * 12 + (m - 1) + n;
-  return `${Math.floor(total / 12)}-${pad((total % 12) + 1)}`;
+  return `${year4(Math.floor(total / 12))}-${pad((total % 12) + 1)}`;
 }
 
 /** The Sunday that starts `day`'s week. */

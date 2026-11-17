@@ -29,7 +29,7 @@ type Props = {
   searchParams: Promise<{ month?: string | string[]; week?: string | string[] }>;
 };
 
-/** Which month, or a group's week, the page shows: from the query, else the newest photo's month. */
+/** Which month or week the page shows: from the query, else the newest photo's month. */
 type View = { kind: "month"; month: string } | { kind: "week"; sunday: string };
 
 async function load({ params, searchParams }: Props) {
@@ -50,7 +50,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 /**
  * A member's photos on a calendar, a month at a time, each day showing its
  * photo. A group's day shows its newest photo, and each week opens a view
- * of every photo that week.
+ * of every photo that week. Any member's week can be opened from the URL.
  */
 export default async function PhotoCalendarPage(props: Props) {
   const loaded = await load(props);
@@ -64,15 +64,12 @@ export default async function PhotoCalendarPage(props: Props) {
     photoDayRange(owner.did),
   ]);
   const isGroup = group !== null;
-  // A week view is a group's; anyone else's goes to that week's month.
-  const view: View =
-    loaded.week && isGroup
-      ? { kind: "week", sunday: weekStart(loaded.week) }
+  const view: View = loaded.week
+    ? { kind: "week", sunday: weekStart(loaded.week) }
       : {
           kind: "month",
           month:
             loaded.month ??
-            loaded.week?.slice(0, 7) ??
             range?.last.slice(0, 7) ??
             // No photos: this month.
             new Date().toISOString().slice(0, 7),
@@ -98,7 +95,14 @@ async function MonthView({ owner, month, range, isGroup }: { owner: Member; mont
   const photos = await photosBetween(owner.did, `${month}-01`, `${month}-31`);
   // Each day's newest photo: the last by record key.
   const byDay = new Map<string, CalendarPhoto>();
-  for (const p of photos) byDay.set(p.uploadDate, p);
+  let multi = false;
+  for (const p of photos) {
+    if (byDay.has(p.uploadDate)) multi = true;
+    byDay.set(p.uploadDate, p);
+  }
+  // Week views show every photo of each day: for groups, and for anyone with
+  // a day of several (a former group, say), so none is out of reach.
+  const weekLinks = isGroup || multi;
   const prev = range && month > range.first.slice(0, 7) ? addMonths(month, -1) : null;
   const next = range && month < range.last.slice(0, 7) ? addMonths(month, 1) : null;
 
@@ -121,10 +125,10 @@ async function MonthView({ owner, month, range, isGroup }: { owner: Member; mont
           <span />
         )}
       </nav>
-      <table className={isGroup ? "calendar has-weeks" : "calendar"}>
+      <table className={weekLinks ? "calendar has-weeks" : "calendar"}>
         <thead>
           <tr>
-            {isGroup && (
+            {weekLinks && (
               <th scope="col">
                 <span className="sr-only">Week</span>
               </th>
@@ -141,7 +145,7 @@ async function MonthView({ owner, month, range, isGroup }: { owner: Member; mont
             const sunday = weekStart(days.find((d) => d !== null)!);
             return (
               <tr key={sunday}>
-                {isGroup && (
+                {weekLinks && (
                   <td className="calendar-week">
                     <Link href={photoCalendarPath(owner, { week: sunday })} aria-label={`Week of ${dayLabel(sunday)}`}>
                       Week »

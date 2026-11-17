@@ -4,7 +4,8 @@ import { addDays, addMonths, monthLabel, monthWeeks, parseDay, parseMonth, weekD
 describe("calendar", () => {
   it("parses months and days, rejecting junk", () => {
     expect(parseMonth("2026-11")).toBe("2026-11");
-    for (const v of ["2026-13", "2026-1", "1999-12", "x", undefined, ["2026-11"]]) expect(parseMonth(v)).toBeNull();
+    expect(parseMonth("1999-12")).toBe("1999-12");
+    for (const v of ["2026-13", "2026-1", "0000-01", "x", undefined, ["2026-11"]]) expect(parseMonth(v)).toBeNull();
     expect(parseDay("2024-02-29")).toBe("2024-02-29");
     for (const v of ["2026-02-29", "2026-11-31", "2026-11-1", "abc"]) expect(parseDay(v)).toBeNull();
   });
@@ -38,6 +39,15 @@ describe("calendar", () => {
     expect(aug).toHaveLength(6);
     expect(aug[0].slice(0, 6).every((d) => d === null)).toBe(true);
     expect(aug[0][6]).toBe("2026-08-01");
+  });
+
+  it("keeps four-digit years below 0100 and around 2000", () => {
+    expect(addMonths("0099-12", 1)).toBe("0100-01");
+    expect(addDays("0099-01-01", -1)).toBe("0098-12-31");
+    expect(weekStart("2000-01-01")).toBe("1999-12-26");
+    expect(parseDay("1999-12-26")).toBe("1999-12-26");
+    expect(monthWeeks("0099-01")[0].includes("0099-01-01")).toBe(true);
+    expect(monthLabel("0099-01")).toMatch(/January 99/);
   });
 
   it("names months", () => {
