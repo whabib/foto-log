@@ -26,6 +26,16 @@ async function adminDid(admin: string): Promise<string | null> {
   return did;
 }
 
+/**
+ * Whether `did` is one of the built-in admins, for a destructive check:
+ * throws if any of them can't be resolved, rather than answering no.
+ */
+export async function isBuiltInAdminStrict(did: string): Promise<boolean> {
+  const dids = await Promise.all(BUILT_IN_ADMINS.map((a) => adminDid(a)));
+  if (dids.some((d) => d === null)) throw new Error("Couldn't resolve the built-in admins");
+  return dids.includes(did);
+}
+
 export async function isBuiltInAdmin(did: string): Promise<boolean> {
   const dids = await Promise.all(BUILT_IN_ADMINS.map((a) => adminDid(a).catch(() => null)));
   return dids.includes(did);

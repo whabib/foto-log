@@ -1,6 +1,7 @@
 import "server-only";
 import type { Agent } from "@atproto/api";
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, eq, gt, isNull, notExists, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { cache } from "react";
 import { getDb } from "@/lib/db";
 import {
@@ -14,6 +15,7 @@ import {
   oauthSession,
   photoIndex,
   siteAdmin,
+  userSession,
 } from "@/lib/db/schema";
 import { FRIEND_COLLECTION } from "@/lib/friends";
 import { PROFILE_COLLECTION } from "@/lib/member-profile";
@@ -72,18 +74,26 @@ export async function deleteFotologRecords(agent: Agent, did: string): Promise<n
 }
 
 /**
- * Removes everything foto-log's database holds for `did`, and records that
- * they left, holding their Fotolog name. Bans are kept. Their sessions and
- * tokens are ended separately.
+ * Removes everything foto-log's database holds for `did`, signs them out on
+ * every browser, and records that they left, holding their Fotolog name.
+ * Bans are kept. Their OAuth tokens are revoked separately.
  */
 export async function forgetMember(did: string): Promise<void> {
   const db = await getDb();
   await db.transaction(async (tx) => {
-    const [row] = await tx.select({ name: member.fotologName }).from(member).where(eq(member.did, did)).limit(1);
+    // The member row first: indexPhoto locks it, so no photo can be indexed after the index is cleared.
+    const [row] = await tx.delete(member).where(eq(member.did, did)).returning({ name: member.fotologName });
+    const name = row?.name ?? null;
     await tx
       .insert(closedMember)
-      .values({ did, fotologName: row?.name ?? null })
-      .onConflictDoUpdate({ target: closedMember.did, set: { fotologName: row?.name ?? null, closedAt: new Date() } });
+      .values({ did, fotologName: name })
+      // Deleting twice keeps the first hold; a delete after coming back starts a new one.
+      .onConflictDoUpdate({
+        target: closedMember.did,
+        set: { fotologName: sql`excluded.fotolog_name`, closedAt: sql`now()` },
+        setWhere: sql`excluded.fotolog_name IS NOT NULL`,
+      });
+    await tx.delete(userSession).where(eq(userSession.did, did));
     await tx.delete(memberSettings).where(eq(memberSettings.did, did));
     await tx.delete(photoIndex).where(eq(photoIndex.did, did));
     await tx.delete(groupMember).where(eq(groupMember.memberDid, did));
@@ -92,28 +102,36 @@ export async function forgetMember(did: string): Promise<void> {
     await tx.delete(groupPost).where(eq(groupPost.groupDid, did));
     await tx.delete(groupPostClaim).where(or(eq(groupPostClaim.groupDid, did), eq(groupPostClaim.memberDid, did)));
     await tx.delete(siteAdmin).where(eq(siteAdmin.did, did));
-    await tx.delete(member).where(eq(member.did, did));
   });
 }
 
 /**
  * When a deleted member signs in again: their pages show again, and if
  * they're back within NAME_HOLD_DAYS, their Fotolog name is theirs again.
- * Call after their member row exists.
+ * Call after their member row exists; if it doesn't, throws, so the sign-in
+ * fails and can be tried again.
  */
 export async function reopenAccount(did: string): Promise<void> {
   const db = await getDb();
-  const [row] = await db.delete(closedMember).where(eq(closedMember.did, did)).returning();
-  if (!row?.fotologName || row.closedAt <= holdStart()) return;
-  try {
-    await db
+  await db.transaction(async (tx) => {
+    const [closed] = await tx.select({ did: closedMember.did }).from(closedMember).where(eq(closedMember.did, did));
+    if (!closed) return;
+    const [known] = await tx.select({ did: member.did }).from(member).where(eq(member.did, did)).for("update");
+    if (!known) throw new Error("A returning member has no member row yet");
+    const [row] = await tx.delete(closedMember).where(eq(closedMember.did, did)).returning();
+    if (!row?.fotologName || row.closedAt <= holdStart()) return;
+    const other = alias(member, "other");
+    await tx
       .update(member)
       .set({ fotologName: row.fotologName, showFotologName: true })
-      .where(and(eq(member.did, did), isNull(member.fotologName)));
-  } catch (err) {
-    // Only if someone took the name anyway; they keep it, and this member can pick another.
-    console.warn("Couldn't give a returning member their Fotolog name back", { did, err });
-  }
+      .where(
+        and(
+          eq(member.did, did),
+          isNull(member.fotologName),
+          notExists(tx.select({ did: other.did }).from(other).where(eq(other.fotologName, row.fotologName))),
+        ),
+      );
+  });
 }
 
 /** Drops `did`'s stored OAuth tokens, in case revoking them didn't. */

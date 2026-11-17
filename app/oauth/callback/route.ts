@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
     if (!signedIn.ok) return redirectTo(signedIn.reason === "full" ? "/accounts?error=full" : "/login?error=failed");
     const isNew = await welcomeNewMember({ did: session.did, handle });
     // Back after deleting their foto-log: their pages show again, and their name if it's still held.
-    await reopenAccount(session.did).catch((err) => console.warn("Couldn't reopen an account", { err }));
+    // Until this runs they count as signed out, so a failure fails the sign-in, to be tried again.
+    await reopenAccount(session.did);
     await rememberHandle(session.did, handle).catch((err) => console.warn("Couldn't record handle", { err }));
     await backfillOnSignIn(session.did);
     // New members get a word about customizing first.

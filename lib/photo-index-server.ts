@@ -9,25 +9,26 @@ import { scanPhotos } from "@/lib/photos/server";
 
 const CURSOR_KEY = "jetstream_cursor";
 
-/** Adds or replaces one photo in the index. */
+/**
+ * Adds or replaces one photo in the index, if `did` is a member. A member
+ * who deleted their foto-log isn't one, so a late Jetstream event or
+ * backfill can't index their photos again. The member row is locked while
+ * writing, so this can't interleave with deleting the account.
+ */
 export async function indexPhoto(did: string, rkey: string, cid: string, record: PhotoRecord): Promise<void> {
   const db = await getDb();
-  const row = {
-    did,
-    rkey,
-    cid,
-    imageCid: record.image.ref.toString(),
-    alt: record.alt ?? null,
-    caption: record.caption ?? null,
-    uploadDate: record.uploadDate,
-    createdAt: new Date(record.createdAt),
-    // The database's clock, which backfill reconciliation compares against.
-    indexedAt: sql`now()`,
-  };
-  await db
-    .insert(photoIndex)
-    .values(row)
-    .onConflictDoUpdate({ target: [photoIndex.did, photoIndex.rkey], set: row });
+  const imageCid = record.image.ref.toString();
+  const alt = record.alt ?? null;
+  const caption = record.caption ?? null;
+  const createdAt = new Date(record.createdAt);
+  // indexed_at is the database's clock, which backfill reconciliation compares against.
+  await db.execute(sql`
+    INSERT INTO ${photoIndex} (did, rkey, cid, image_cid, alt, caption, upload_date, created_at, indexed_at)
+    SELECT ${did}, ${rkey}, ${cid}, ${imageCid}, ${alt}, ${caption}, ${record.uploadDate}, ${createdAt}, now()
+    WHERE EXISTS (SELECT 1 FROM ${member} WHERE ${member.did} = ${did} FOR SHARE)
+    ON CONFLICT (did, rkey) DO UPDATE SET
+      cid = excluded.cid, image_cid = excluded.image_cid, alt = excluded.alt, caption = excluded.caption,
+      upload_date = excluded.upload_date, created_at = excluded.created_at, indexed_at = excluded.indexed_at`);
 }
 
 /** Removes one photo from the index. */

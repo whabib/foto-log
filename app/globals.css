@@ -2034,7 +2034,8 @@ body:has(.member-theme) .account-menu li button:hover {
   margin-top: 0.25em;
 }
 
+/* A fixed dark red, so white text has enough contrast in both themes. */
 .settings-form button.danger-button {
-  background: var(--error);
+  background: #b3261e;
   color: #fff;
 }
