@@ -1,5 +1,5 @@
 import "server-only";
-import { listFriends } from "@/lib/friends-server";
+import { friendCount } from "@/lib/friends-server";
 import { eq } from "drizzle-orm";
 import { getDb, getPool } from "@/lib/db";
 import { bannedMember, siteAdmin } from "@/lib/db/schema";
@@ -66,7 +66,7 @@ export type AdminMemberRow = {
   showFotologName: boolean;
   joinedAt: Date;
   photos: number;
-  /** How many are on their Friends/Favorites list; null if their account couldn't be resolved. */
+  /** How many are on their Friends/Favorites list; null if it couldn't be read. */
   following: number | null;
   banned: boolean;
   /** "built-in" for a built-in admin, "made" for one made on the admin page. */
@@ -133,5 +133,5 @@ export async function adminMembers(page: number): Promise<{ rows: AdminMemberRow
 async function followingCount(did: string): Promise<number | null> {
   const actor = await resolveActor(did).catch(() => null);
   if (!actor) return null;
-  return (await listFriends(actor)).length;
+  return friendCount(actor);
 }
