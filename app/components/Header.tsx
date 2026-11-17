@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import AccountMenu from "@/app/components/AccountMenu";
 import AccountWatcher from "@/app/components/AccountWatcher";
+import { getGroup } from "@/lib/groups-server";
 import { currentIdentity } from "@/lib/photos/server";
 import { memberPath } from "@/lib/photos/urls";
 
@@ -9,7 +10,9 @@ export default async function Header() {
   const user = await getCurrentUser();
   // The session keeps the handle from sign-in; look up the current one so a
   // changed handle doesn't send My Page to someone else's page.
-  const identity = user ? await currentIdentity(user) : null;
+  const [identity, group] = user
+    ? await Promise.all([currentIdentity(user), getGroup(user.did).catch(() => null)])
+    : [null, null];
   return (
     <header className="site-header">
       <Link href="/" className="brand" aria-label="foto-log home">
@@ -22,6 +25,7 @@ export default async function Header() {
           <AccountMenu
             label={identity.name ?? (identity.handle ? `@${identity.handle}` : user.did)}
             myPage={memberPath(identity)}
+            isGroup={group !== null}
           />
         </div>
       ) : (

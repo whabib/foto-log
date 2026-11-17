@@ -21,11 +21,14 @@ describe("countries", () => {
     }
   });
 
-  it("names and sorts them in English", () => {
+  it("names them in English, United States first, then sorted", () => {
     expect(countryName("US")).toBe("United States");
     expect(countryName("FR")).toBe("France");
-    const names = countryOptions().map((c) => c.name);
+    const [first, ...rest] = countryOptions();
+    expect(first).toEqual({ code: "US", name: "United States" });
+    const names = rest.map((c) => c.name);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, "en")));
+    expect(names).not.toContain("United States");
   });
 
   it("rejects codes that aren't countries", () => {

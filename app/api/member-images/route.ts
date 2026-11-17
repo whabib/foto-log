@@ -84,6 +84,6 @@ export async function POST(request: Request) {
     console.error("Saving a member image failed", { did: user.did, field, err });
     return Response.json({ error: "Something went wrong saving that. Please try again." }, { status: 502 });
   }
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return Response.json({ ok: true });
 }

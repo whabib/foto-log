@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { type SettingsField, validateMemberSettings } from "@/lib/member-settings";
-import { resetMemberSettings, saveMemberSettings } from "@/lib/member-settings-server";
+import { getMemberSettings, updateMemberSettings } from "@/lib/member-settings-server";
 import { approveRequest, leaveGroup, setGroup } from "@/lib/groups-server";
 import { checkName, memberName, type SetNameResult, setFotologName, setShowFotologName } from "@/lib/fotolog-name-server";
 
@@ -13,22 +13,34 @@ export type SaveState =
   | { status: "saved" }
   | { status: "error"; errors: Partial<Record<SettingsField, string>>; message?: string };
 
-const FIELDS: SettingsField[] = ["title", "country", "region", "locality", "backgroundColor", "textColor", "linkColor"];
+/** Which settings each page's form saves; the rest keep their saved values. */
+const SECTION_FIELDS: Record<"profile" | "page", SettingsField[]> = {
+  profile: ["country", "region", "locality"],
+  page: ["title", "backgroundColor", "textColor", "linkColor"],
+};
 
-/** Saves the signed-in member's own settings. */
+/** Saves the settings on one Settings page (the form's `section`) for the signed-in member. */
 export async function saveSettings(_prev: SaveState, form: FormData): Promise<SaveState> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const input = Object.fromEntries(FIELDS.map((f) => [f, form.get(f)?.toString() ?? null])) as Record<
-    SettingsField,
-    string | null
-  >;
+  const section = form.get("section") === "profile" ? "profile" : "page";
+  const saved = await getMemberSettings(user.did);
+  const input = Object.fromEntries(
+    (Object.values(SECTION_FIELDS).flat() as SettingsField[]).map((f) => [
+      f,
+      SECTION_FIELDS[section].includes(f) ? (form.get(f)?.toString() ?? null) : (saved?.[f] ?? null),
+    ]),
+  ) as Record<SettingsField, string | null>;
   const result = validateMemberSettings(input);
   if (!result.ok) return { status: "error", errors: result.errors };
   // Only members with a Fotolog name get the choice.
   const primary = form.get("primaryName")?.toString();
   try {
-    await saveMemberSettings(user.did, result.value);
+    // Only this page's settings are written; the others were filled in for validation.
+    await updateMemberSettings(
+      user.did,
+      Object.fromEntries(SECTION_FIELDS[section].map((f) => [f, result.value[f]])),
+    );
     if (primary === "fotolog" || primary === "bluesky") {
       const { name } = await memberName(user.did);
       if (name) await setShowFotologName(user.did, primary === "fotolog");
@@ -37,18 +49,19 @@ export async function saveSettings(_prev: SaveState, form: FormData): Promise<Sa
     console.error("Saving member settings failed", { did: user.did, err });
     return { status: "error", errors: {}, message: "Something went wrong saving. Please try again." };
   }
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { status: "saved" };
 }
 
-/** Clears the signed-in member's settings back to the defaults. */
+/** Puts the signed-in member's page title and colors back to the defaults. */
 export async function resetSettings() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  await resetMemberSettings(user.did);
-  revalidatePath("/settings");
+  // The page's look only: the location belongs to the Profile page.
+  await updateMemberSettings(user.did, { title: null, backgroundColor: null, textColor: null, linkColor: null });
+  revalidatePath("/settings", "layout");
   // A fresh value each time, so the page remounts the form with the defaults.
-  redirect(`/settings?reset=${Date.now()}`);
+  redirect(`/settings/customize?reset=${Date.now()}`);
 }
 
 /** Whether a Fotolog name is free to take, for the live check as the member types. */
@@ -86,7 +99,7 @@ async function asGroupOwner(
     console.error(`${what} failed`, { did: user.did, err });
     return { ok: false, message: "Something went wrong. Please try again." };
   }
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { ok: true };
 }
 

@@ -56,6 +56,7 @@ const RESERVED = new Set([
   "system",
   "team",
   "terms",
+  "welcome",
   "www",
 ]);
 

@@ -28,9 +28,11 @@ export async function GET(request: NextRequest) {
     const handle = await lookupHandle(session);
     const signedIn = await signInOnBrowser(session.did, handle);
     if (!signedIn.ok) return redirectTo(signedIn.reason === "full" ? "/accounts?error=full" : "/login?error=failed");
-    await welcomeNewMember({ did: session.did, handle });
+    const isNew = await welcomeNewMember({ did: session.did, handle });
     await rememberHandle(session.did, handle).catch((err) => console.warn("Couldn't record handle", { err }));
     await backfillOnSignIn(session.did);
+    // New members get a word about customizing first.
+    if (isNew) return redirectTo("/welcome");
     // Members land on their own fotolog.
     const name = await primaryName(session.did).catch(() => null);
     return redirectTo(memberPath({ did: session.did, handle, name }));

@@ -1,22 +1,15 @@
 "use client";
 
 import { startTransition, useActionState, useState } from "react";
-import { formatLocation, isRegionCode, regionLabel, regionOptions } from "@/lib/geo";
 import { contrastRatio, isHexColor, MIN_CONTRAST } from "@/lib/member-settings";
 import { resetSettings, type SaveState, saveSettings } from "./actions";
 import { useRouter } from "next/navigation";
 import MemberImageField, { type ImageError, NO_CHANGE, type PendingImage, saveImageChange } from "./MemberImageField";
-import FotologNameField from "./FotologNameField";
-import GroupSettings, { type GroupMember } from "./GroupSettings";
-import type { JoinPolicy } from "@/lib/groups-server";
 import { useLeaveWarning } from "./useLeaveWarning";
 import WallpaperField from "./WallpaperField";
 
 type Values = {
   title: string;
-  country: string;
-  region: string;
-  locality: string;
   backgroundColor: string;
   textColor: string;
   linkColor: string;
@@ -25,16 +18,13 @@ type Values = {
 type Props = {
   initial: Values;
   defaults: { title: string; backgroundColor: string; textColor: string };
-  countries: { code: string; name: string }[];
+  /** The member's location as their page shows it, for the preview. */
+  location: string | null;
   hasSaved: boolean;
   /** The member's own page, shown after a successful save. */
   memberPage: string;
   /** Saved page images; undefined if they couldn't be loaded. */
   images?: { titleImage: string | null; wallpaper: string | null; wallpaperMode: "tile" | "fill" };
-  /** The member's Fotolog name and Bluesky handle, and which one they're shown by. */
-  identity: { name: string | null; handle: string | null; primary: "fotolog" | "bluesky" };
-  /** Whether the account is a group, and its members; undefined if that couldn't be loaded. */
-  group?: { joinPolicy: JoinPolicy | null; members: GroupMember[] };
 };
 
 function ColorField({
@@ -84,28 +74,24 @@ function ColorField({
   );
 }
 
-export default function SettingsForm({ initial, defaults, countries, hasSaved, memberPage, images, identity, group }: Props) {
+/** The Member Page Customization page's form: title, title image, colors and wallpaper. */
+export default function PageForm({ initial, defaults, location, hasSaved, memberPage, images }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Values>(initial);
-  const [primary, setPrimary] = useState(identity.primary);
-  // Setting a name makes it primary; follow the saved choice when it changes.
-  const [savedPrimary, setSavedPrimary] = useState(identity.primary);
-  if (savedPrimary !== identity.primary) {
-    setSavedPrimary(identity.primary);
-    setPrimary(identity.primary);
-  }
-  // Which Save was pressed, so the result shows beside it.
-  const [savedFrom, setSavedFrom] = useState<"profile" | "page">("page");
   // Image changes wait here until Save, like the rest of the form.
   const [titleImage, setTitleImage] = useState<PendingImage>(NO_CHANGE);
   const [wallpaper, setWallpaper] = useState<PendingImage>(NO_CHANGE);
   const [wallpaperMode, setWallpaperMode] = useState(images?.wallpaperMode ?? "tile");
   const [imageErrors, setImageErrors] = useState<{ titleImage?: ImageError; wallpaper?: ImageError }>({});
+  // Shown after a save until the next edit.
+  const [showSaved, setShowSaved] = useState(false);
   const [state, formAction, pending] = useActionState<SaveState, FormData>(
     async (prev, data) => {
+      setShowSaved(false);
       const result = await saveSettings(prev, data);
       if (result.status !== "saved") return result;
       if (!images) {
+        setShowSaved(true);
         router.push(memberPage);
         return result;
       }
@@ -129,53 +115,39 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, m
         return { status: "error", errors: {}, message: "Your settings were saved, but an image wasn't. See above." };
       }
       // Everything saved: show the member their page.
+      setShowSaved(true);
       router.push(memberPage);
       return result;
     },
     { status: "idle" },
   );
-  const set = (field: keyof Values) => (v: string) =>
-    setValues((prev) => ({
-      ...prev,
-      [field]: v,
-      // Region codes belong to one country; clear it when the country changes.
-      ...(field === "country" ? { region: "" } : {}),
-    }));
+  const set = (field: keyof Values) => (v: string) => setValues((prev) => ({ ...prev, [field]: v }));
   const errors = state.status === "error" ? state.errors : {};
 
   const dirty =
     (Object.keys(values) as (keyof Values)[]).some((k) => values[k] !== initial[k]) ||
-    primary !== identity.primary ||
     titleImage.kind !== "none" ||
     wallpaper.kind !== "none" ||
     (images !== undefined && wallpaperMode !== images.wallpaperMode);
   // Stays on while saving; the redirect after a save is programmatic, so it isn't asked about.
   useLeaveWarning(dirty);
 
-  const regions = regionOptions(values.country);
   const bg = isHexColor(values.backgroundColor) ? values.backgroundColor : defaults.backgroundColor;
   const fg = isHexColor(values.textColor) ? values.textColor : defaults.textColor;
   // Blank link color means "same as the text".
   const link = isHexColor(values.linkColor) ? values.linkColor : fg;
   const ratio = contrastRatio(bg, fg);
   const linkRatio = contrastRatio(bg, link);
-  const previewLocation =
-    values.country && (!regions || !values.region || isRegionCode(values.country, values.region))
-      ? formatLocation({
-          country: values.country,
-          region: values.region || null,
-          locality: values.locality.trim() || null,
-        })
-      : null;
+  const previewLocation = location;
 
   const status =
     state.status === "error" && state.message ? (
       <p className="error" role="alert">
         {state.message}
       </p>
-    ) : state.status === "saved" ? (
+    ) : state.status === "saved" && showSaved ? (
       <p className="notice-inline" role="status">
-        Saved.
+        Your changes have been saved.
       </p>
     ) : null;
 
@@ -187,86 +159,16 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, m
           // Submit via the action without React's automatic form reset, which
           // would visually reset the controlled <select>s after saving.
           e.preventDefault();
-          const submitter = (e.nativeEvent as SubmitEvent).submitter;
-          setSavedFrom(submitter?.dataset.section === "profile" ? "profile" : "page");
           const data = new FormData(e.currentTarget);
           startTransition(() => formAction(data));
         }}
+        // Any edit, typed or picked, clears "saved".
+        onChange={() => setShowSaved(false)}
       >
         {/* Locked while saving, so no edit is made after the values were sent. */}
         <fieldset className="settings-fields" disabled={pending}>
-          <section className="settings-section" aria-labelledby="profile-heading">
-            <h2 id="profile-heading">Profile</h2>
-            <FotologNameField
-              name={identity.name}
-              handle={identity.handle}
-              primary={primary}
-              onPrimaryChange={setPrimary}
-              disabled={pending}
-            />
-            <fieldset className="field">
-              <legend>Location</legend>
-              <label htmlFor="country">Country</label>
-              <select id="country" name="country" value={values.country} onChange={(e) => set("country")(e.target.value)}>
-                <option value="">Not shown</option>
-                {countries.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              {errors.country && <p className="field-error">{errors.country}</p>}
-
-              {values.country && (
-                <>
-                  <label htmlFor="region">
-                    {regionLabel(values.country)}
-                    {!regions && <span className="optional"> (optional)</span>}
-                  </label>
-                  {regions ? (
-                    <select id="region" name="region" value={values.region} onChange={(e) => set("region")(e.target.value)}>
-                      <option value="">Not shown</option>
-                      {regions.map((r) => (
-                        <option key={r.code} value={r.code}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      id="region"
-                      name="region"
-                      type="text"
-                      value={values.region}
-                      onChange={(e) => set("region")(e.target.value)}
-                    />
-                  )}
-                  {errors.region && <p className="field-error">{errors.region}</p>}
-
-                  <label htmlFor="locality">
-                    City or town <span className="optional">(optional)</span>
-                  </label>
-                  <input
-                    id="locality"
-                    name="locality"
-                    type="text"
-                    value={values.locality}
-                    onChange={(e) => set("locality")(e.target.value)}
-                  />
-                  {errors.locality && <p className="field-error">{errors.locality}</p>}
-                </>
-              )}
-            </fieldset>
-            {savedFrom === "profile" && status}
-            <button type="submit" data-section="profile">
-              {pending && savedFrom === "profile" ? "Saving…" : "Save"}
-            </button>
-            {group && <GroupSettings joinPolicy={group.joinPolicy} members={group.members} />}
-          </section>
-
-          <section className="settings-section" aria-labelledby="page-heading">
-            <h2 id="page-heading">Member Page Customization</h2>
-            <p className="muted">How your fotolog looks to everyone who visits it.</p>
+          <input type="hidden" name="section" value="page" />
+          <section className="settings-section">
             <div className="field">
               <label htmlFor="title">Title</label>
               <input
@@ -287,7 +189,10 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, m
                 label="Title Image"
                 current={images.titleImage}
                 pending={titleImage}
-                onChange={setTitleImage}
+                onChange={(v) => {
+                  setTitleImage(v);
+                  setShowSaved(false);
+                }}
                 disabled={pending}
                 error={imageErrors.titleImage}
                 alt={values.title.trim() || defaults.title}
@@ -343,19 +248,23 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, m
               <WallpaperField
                 current={images.wallpaper}
                 pending={wallpaper}
-                onChange={setWallpaper}
+                onChange={(v) => {
+                  setWallpaper(v);
+                  setShowSaved(false);
+                }}
                 mode={wallpaperMode}
-                onModeChange={setWallpaperMode}
+                onModeChange={(m) => {
+                  setWallpaperMode(m);
+                  setShowSaved(false);
+                }}
                 disabled={pending}
                 error={imageErrors.wallpaper}
                 background={bg}
               />
             )}
 
-            {savedFrom === "page" && status}
-            <button type="submit" data-section="page">
-              {pending && savedFrom === "page" ? "Saving…" : "Save"}
-            </button>
+            {status}
+            <button type="submit">{pending ? "Saving…" : "Save"}</button>
           </section>
         </fieldset>
       </form>
@@ -365,7 +274,7 @@ export default function SettingsForm({ initial, defaults, countries, hasSaved, m
           action={resetSettings}
           className="reset-form"
           onSubmit={(e) => {
-            if (!confirm("Reset your member page to the default title, no location, and the default colors?")) {
+            if (!confirm("Reset your member page to the default title and colors?")) {
               e.preventDefault();
             }
           }}

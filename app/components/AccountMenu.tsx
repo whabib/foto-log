@@ -12,9 +12,12 @@ import { useEffect, useRef } from "react";
 export default function AccountMenu({
   label,
   myPage,
+  isGroup = false,
 }: {
   label: string;
   myPage: string;
+  /** The account is a group, so its menu has Group Management. */
+  isGroup?: boolean;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const pathname = usePathname();
@@ -65,6 +68,11 @@ export default function AccountMenu({
         <li>
           <Link href="/settings">Settings</Link>
         </li>
+        {isGroup && (
+          <li>
+            <Link href="/settings/group">Group Management</Link>
+          </li>
+        )}
         <li>
           <Link href="/accounts">Switch accounts</Link>
         </li>

@@ -27,11 +27,15 @@ export function countryName(code: string): string {
   return countryNames.of(code) ?? code;
 }
 
-/** All countries, sorted by English name. */
+/** Countries listed first, ahead of the alphabetical list. */
+const TOP_COUNTRIES = ["US"];
+
+/** All countries: the United States first, then the rest sorted by English name. */
 export function countryOptions(): { code: string; name: string }[] {
-  return COUNTRY_CODES.map((code) => ({ code, name: countryName(code) })).sort((a, b) =>
-    a.name.localeCompare(b.name, "en"),
-  );
+  const rest = COUNTRY_CODES.filter((code) => !TOP_COUNTRIES.includes(code))
+    .map((code) => ({ code, name: countryName(code) }))
+    .sort((a, b) => a.name.localeCompare(b.name, "en"));
+  return [...TOP_COUNTRIES.map((code) => ({ code, name: countryName(code) })), ...rest];
 }
 
 type Subdivisions = {
