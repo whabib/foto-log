@@ -108,8 +108,9 @@ export async function isOnList(viewerDid: string, did: string): Promise<boolean>
 
 /**
  * The members among `dids`, each with their handle and newest photo, from
- * the member table and the photo index. DIDs that aren't foto-log members
- * are left out: they stay on the list and show up once they sign in.
+ * the member table and the photo index. DIDs that aren't foto-log members,
+ * or are banned, are left out: they stay on the list and show up once they
+ * sign in, or the ban is lifted.
  */
 export async function memberRows(dids: string[]): Promise<FriendRow[]> {
   if (dids.length === 0) return [];
@@ -131,7 +132,8 @@ export async function memberRows(dids: string[]): Promise<FriendRow[]> {
        WHERE did = m.did AND created_at <= now() + interval '5 minutes'
        ORDER BY created_at DESC LIMIT 1
      ) p ON true
-     WHERE m.did = ANY($1::text[])`,
+     WHERE m.did = ANY($1::text[])
+       AND NOT EXISTS (SELECT 1 FROM banned_member b WHERE b.did = m.did)`,
     [dids],
   );
   return rows.map((r) => {

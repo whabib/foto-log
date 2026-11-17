@@ -162,3 +162,15 @@ export const groupPost = pgTable(
   },
   (t) => [primaryKey({ columns: [t.groupDid, t.rkey] })],
 );
+
+/**
+ * Members an admin has banned. They can't sign in, and foto-log hides their
+ * page and photos. The photos stay in their own repo; lifting the ban shows
+ * them again.
+ */
+export const bannedMember = pgTable("banned_member", {
+  did: text("did").primaryKey(),
+  /** The admin who banned them. */
+  bannedBy: text("banned_by").notNull(),
+  bannedAt: timestamp("banned_at", { withTimezone: true }).notNull().defaultNow(),
+});

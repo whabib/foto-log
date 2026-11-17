@@ -252,6 +252,65 @@ a {
   text-decoration: none;
 }
 
+.admin-page {
+  max-width: 960px;
+  margin: 32px auto;
+  padding: 0 16px;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.admin-table .num {
+  text-align: right;
+}
+
+.admin-table tr.banned td {
+  color: var(--muted);
+}
+
+.admin-banned {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.admin-table button {
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.admin-table .admin-ban {
+  color: var(--error);
+}
+
+.admin-pages {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+}
+
 .post-page {
   max-width: 720px;
   margin: 32px auto;

@@ -9,6 +9,7 @@ const ERRORS: Record<string, string> = {
   invalid_handle: "That doesn't look like a handle. Try something like yourname.bsky.social.",
   resolve_failed: "We couldn't find that account. Check the handle and try again.",
   denied: "Sign-in was cancelled.",
+  banned: "This account can't sign in to foto-log.",
   failed: "Something went wrong signing you in. Please try again.",
 };
 

@@ -1,11 +1,11 @@
 import "server-only";
 import type { OAuthSession } from "@atproto/oauth-client-node";
-import { and, count, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNull, notExists, or } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
 import { isProduction } from "@/lib/config";
 import { randomId, sign, unsign } from "@/lib/crypto";
 import { getDb, withLock } from "@/lib/db";
-import { oauthSession, userSession } from "@/lib/db/schema";
+import { bannedMember, oauthSession, userSession } from "@/lib/db/schema";
 import { isGroup } from "@/lib/groups-server";
 import { getOAuthClient } from "@/lib/oauth/client";
 import { fetchFromPds } from "@/lib/safe-fetch";
@@ -171,7 +171,14 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const [row] = await db
     .select({ did: userSession.did, handle: userSession.handle })
     .from(userSession)
-    .where(and(eq(userSession.id, id), live()));
+    .where(
+      and(
+        eq(userSession.id, id),
+        live(),
+        // A banned member is signed out everywhere, even mid-sign-in.
+        notExists(db.select({ did: bannedMember.did }).from(bannedMember).where(eq(bannedMember.did, userSession.did))),
+      ),
+    );
   if (!row) return null;
   const pageAccount = (await headers()).get(PAGE_ACCOUNT_HEADER);
   if (pageAccount && pageAccount !== row.did) return null;
@@ -242,6 +249,18 @@ async function endSession(id: string, did: string): Promise<void> {
   await withLock(accountLock(did), async () => {
     await db.delete(userSession).where(eq(userSession.id, id));
     await revokeIfUnusedLocked(did);
+  });
+}
+
+/** Signs `did` out on every browser and revokes its tokens, group or not. */
+export async function endAllSessions(did: string): Promise<void> {
+  const db = await getDb();
+  await withLock(accountLock(did), async () => {
+    await db.delete(userSession).where(eq(userSession.did, did));
+    const client = await getOAuthClient();
+    await client.revoke(did).catch((err) => {
+      console.warn("OAuth revoke failed", { did, err });
+    });
   });
 }
 
