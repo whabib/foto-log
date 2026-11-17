@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { pageParam } from "@/lib/page-param";
 import { ADMIN_PAGE_SIZE, adminMembers, isAdmin } from "@/lib/admin-server";
 import { memberPath } from "@/lib/photos/urls";
 import MemberActions from "./MemberActions";
@@ -18,8 +19,8 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
   // Anyone else sees no admin page at all.
   if (!(await isAdmin(user.did))) notFound();
 
-  const { page: pageParam } = await searchParams;
-  const page = Math.max(1, Math.floor(Number(typeof pageParam === "string" ? pageParam : 1)) || 1);
+  const { page: pageValue } = await searchParams;
+  const page = pageParam(pageValue);
   const { rows, total } = await adminMembers(page);
   const pages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
 

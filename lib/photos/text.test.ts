@@ -51,6 +51,17 @@ describe("credit on a group's post", () => {
     expect(facets.at(-1)!.index.byteEnd).toBe(bytes(text));
   });
 
+  it("cuts a very long handle short but still mentions the uploader", () => {
+    const long = { did: "did:plc:alice", handle: `${"a".repeat(240)}.example.com` };
+    const credit = creditText(long.handle);
+    expect(graphemeLength(credit)).toBe(4 + 60);
+    expect(credit.endsWith("…")).toBe(true);
+    const { text, facets } = buildPostText("", url, long);
+    expect(text).toBe(`${credit}\n${linkText}`);
+    expect(facets[0].features).toEqual([{ $type: "app.bsky.richtext.facet#mention", did: "did:plc:alice" }]);
+    expect(maxCaptionGraphemes(url, long.handle)).toBeGreaterThan(100);
+  });
+
   it("works with no caption", () => {
     const { text } = buildPostText("", url, credit);
     expect(text).toBe(`by @alice.bsky.social\n${linkText}`);

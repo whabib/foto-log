@@ -17,9 +17,18 @@ export function photoLinkText(photoUrl: string): string {
 /** Who a group's photo is by, for its Bluesky post: the uploader's DID and current handle. */
 export type PostCredit = { did: string; handle: string };
 
-/** The credit line in a group's Bluesky post, e.g. "by @alice.bsky.social". */
+/** Longest handle the credit shows in full; longer ones are cut short, still mentioning the uploader. */
+export const CREDIT_HANDLE_MAX = 60;
+
+/**
+ * The credit line in a group's Bluesky post, e.g. "by @alice.bsky.social".
+ * A handle over CREDIT_HANDLE_MAX graphemes is cut short with "…", so a long
+ * one can't crowd out the link.
+ */
 export function creditText(handle: string): string {
-  return `by @${handle}`;
+  const parts = Array.from(segmenter.segment(handle), (s) => s.segment);
+  const shown = parts.length > CREDIT_HANDLE_MAX ? `${parts.slice(0, CREDIT_HANDLE_MAX - 1).join("")}…` : handle;
+  return `by @${shown}`;
 }
 
 /**

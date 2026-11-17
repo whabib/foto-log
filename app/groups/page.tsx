@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import GroupBox from "@/app/components/groups/GroupBox";
 import { getCurrentUser } from "@/lib/auth";
+import { pageParam } from "@/lib/page-param";
 import { timeAgo } from "@/lib/friends";
 import { DIRECTORY_PAGE_SIZE, groupDirectory } from "@/lib/group-directory-server";
 import { displayName, memberPath } from "@/lib/photos/urls";
@@ -10,8 +11,8 @@ export const metadata: Metadata = { title: "Groups · foto-log" };
 
 /** Every group on foto-log, the most recently active first, with a way in or out of each. */
 export default async function GroupsPage({ searchParams }: PageProps<"/groups">) {
-  const { page: pageParam } = await searchParams;
-  const page = Math.max(1, Math.floor(Number(typeof pageParam === "string" ? pageParam : 1)) || 1);
+  const { page: pageValue } = await searchParams;
+  const page = pageParam(pageValue);
   const user = await getCurrentUser();
   const { groups, total } = await groupDirectory(page, user?.did ?? null);
   const pages = Math.max(1, Math.ceil(total / DIRECTORY_PAGE_SIZE));
