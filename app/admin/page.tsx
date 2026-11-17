@@ -42,6 +42,10 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
               <th scope="col" className="num">
                 Following
               </th>
+              <th scope="col">Group</th>
+              <th scope="col" className="num">
+                Group members
+              </th>
               <th scope="col">Status</th>
               <th scope="col">
                 <span className="sr-only">Actions</span>
@@ -63,6 +67,8 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
                   <td>{dateFormat.format(m.joinedAt)}</td>
                   <td className="num">{m.photos}</td>
                   <td className="num">{m.following ?? "?"}</td>
+                  <td>{m.groupMembers !== null ? "Yes" : ""}</td>
+                  <td className="num">{m.groupMembers ?? ""}</td>
                   <td>
                     {m.banned && <span className="admin-banned">Banned</span>}
                     {m.admin && <span className="admin-role">{m.admin === "built-in" ? "Admin (built in)" : "Admin"}</span>}

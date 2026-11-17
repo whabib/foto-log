@@ -69,6 +69,8 @@ export type AdminMemberRow = {
   /** How many are on their Friends/Favorites list; null if it couldn't be read. */
   following: number | null;
   banned: boolean;
+  /** How many members the group has, not counting requests; null if it isn't a group. */
+  groupMembers: number | null;
   /** "built-in" for a built-in admin, "made" for one made on the admin page. */
   admin: "built-in" | "made" | null;
 };
@@ -92,11 +94,15 @@ export async function adminMembers(page: number): Promise<{ rows: AdminMemberRow
       photos: string;
       banned: boolean;
       made_admin: boolean;
+      group_members: string | null;
     }>(
       `SELECT m.did, m.handle, m.fotolog_name, m.show_fotolog_name, m.joined_at,
               (SELECT count(*) FROM photo_index p WHERE p.did = m.did) AS photos,
               EXISTS (SELECT 1 FROM banned_member b WHERE b.did = m.did) AS banned,
-              EXISTS (SELECT 1 FROM site_admin a WHERE a.did = m.did) AS made_admin
+              EXISTS (SELECT 1 FROM site_admin a WHERE a.did = m.did) AS made_admin,
+              CASE WHEN EXISTS (SELECT 1 FROM fotolog_group g WHERE g.did = m.did) THEN
+                (SELECT count(*) FROM group_member gm WHERE gm.group_did = m.did AND gm.status = 'member')
+              END AS group_members
        FROM member m
        ORDER BY m.joined_at DESC, m.did
        LIMIT $1 OFFSET $2`,
@@ -125,6 +131,7 @@ export async function adminMembers(page: number): Promise<{ rows: AdminMemberRow
       photos: Number(r.photos),
       following: following[i],
       banned: r.banned,
+      groupMembers: r.group_members === null ? null : Number(r.group_members),
       admin: builtIn[i] ? "built-in" : r.made_admin ? "made" : null,
     })),
   };
