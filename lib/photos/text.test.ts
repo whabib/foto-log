@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPostText, graphemeLength, maxCaptionGraphemes, photoLinkText } from "./text";
+import { buildPostText, creditText, graphemeLength, maxCaptionGraphemes, photoLinkText } from "./text";
 
 const url = "https://foto-log.com/@alice.bsky.social/2026-10-14";
 const linkText = "foto-log.com/@alice.bsky.social/2026-10-14";
@@ -34,6 +34,32 @@ describe("buildPostText", () => {
     expect(types).toContain("app.bsky.richtext.facet#tag");
     expect(types).not.toContain("app.bsky.richtext.facet#mention");
     expect(types.filter((t) => t === "app.bsky.richtext.facet#link")).toHaveLength(2);
+  });
+});
+
+describe("credit on a group's post", () => {
+  const credit = { did: "did:plc:alice", handle: "alice.bsky.social" };
+
+  it("names the uploader between the caption and the link, as a mention", () => {
+    const { text, facets } = buildPostText("Café 📷", url, credit);
+    expect(text).toBe(`Café 📷\nby @alice.bsky.social\n${linkText}`);
+    const mention = facets.find((f) => f.features[0].$type === "app.bsky.richtext.facet#mention")!;
+    expect(mention.features).toEqual([{ $type: "app.bsky.richtext.facet#mention", did: "did:plc:alice" }]);
+    expect(mention.index.byteStart).toBe(bytes("Café 📷\nby "));
+    expect(mention.index.byteEnd).toBe(bytes("Café 📷\nby @alice.bsky.social"));
+    expect(facets.at(-1)!.index.byteStart).toBe(bytes("Café 📷\nby @alice.bsky.social\n"));
+    expect(facets.at(-1)!.index.byteEnd).toBe(bytes(text));
+  });
+
+  it("works with no caption", () => {
+    const { text } = buildPostText("", url, credit);
+    expect(text).toBe(`by @alice.bsky.social\n${linkText}`);
+  });
+
+  it("leaves room for the credit in the caption limit", () => {
+    const max = maxCaptionGraphemes(url, credit.handle);
+    expect(max).toBe(300 - graphemeLength(linkText) - 1 - graphemeLength(creditText(credit.handle)) - 1);
+    expect(graphemeLength(buildPostText("a".repeat(max), url, credit).text)).toBe(300);
   });
 });
 

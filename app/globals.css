@@ -333,6 +333,80 @@ a {
   margin-top: 16px;
 }
 
+.groups-page {
+  max-width: 820px;
+  margin: 32px auto;
+  padding: 0 16px;
+}
+
+.group-directory {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+}
+
+.group-entry {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.group-entry-photo {
+  flex: none;
+  width: 120px;
+}
+
+.group-entry-photo img,
+.group-entry-empty {
+  display: block;
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.group-entry-empty {
+  background: var(--border);
+}
+
+.group-entry-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.group-entry-name {
+  margin: 0 0 4px;
+  font-size: 1.125rem;
+  overflow-wrap: anywhere;
+}
+
+.group-entry-when {
+  margin: 0 0 6px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.group-entry-description {
+  margin: 0 0 8px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.group-entry .group-box {
+  margin: 8px 0 0;
+}
+
+@media (max-width: 520px) {
+  .group-entry-photo,
+  .group-entry-photo img,
+  .group-entry-empty {
+    width: 80px;
+    height: 80px;
+  }
+}
+
 .post-page {
   max-width: 720px;
   margin: 32px auto;
@@ -465,6 +539,21 @@ a {
   line-height: 0;
 }
 
+/* A group's Bluesky description, under its title. */
+.member-description {
+  max-width: 40em;
+  margin: 8px auto 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.member-title.has-image .member-description {
+  margin: 0 auto;
+  padding: 10px 20px 14px;
+}
+
 /* Natural size, scaled down to the page box's width and at most 150px tall. */
 .title-image {
   display: block;
@@ -538,6 +627,12 @@ body:has(.member-theme) .account-menu li button:hover {
 .member-right {
   grid-area: right;
   min-width: 0;
+}
+
+/* Room between the rails' sections: profile and Recent Photos, Friends/Favorites and Groups. */
+.member-left > .rail-heading,
+.member-right > .rail-heading ~ .rail-heading {
+  margin-top: 40px;
 }
 
 .member-name {

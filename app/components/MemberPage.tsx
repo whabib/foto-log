@@ -85,7 +85,13 @@ export default function MemberPage(props: MemberPageProps) {
   const who = displayName(owner);
 
   return (
-    <MemberFrame owner={owner} look={look} images={images} signedIn={signedIn}>
+    <MemberFrame
+      owner={owner}
+      look={look}
+      images={images}
+      signedIn={signedIn}
+      description={props.group?.description}
+    >
         <div className="member-cols">
           <main className="member-center">
             {photo ? (
@@ -170,6 +176,9 @@ export default function MemberPage(props: MemberPageProps) {
                 <GroupsColumn owner={owner} isOwner={isOwner} />
               </Suspense>
             )}
+            <p className="rail-more">
+              » <Link href="/groups">View all groups</Link>
+            </p>
           </aside>
         </div>
     </MemberFrame>
@@ -185,12 +194,15 @@ export function MemberFrame({
   look,
   images,
   signedIn,
+  description,
   children,
 }: {
   owner: Member;
   look: MemberPageLook;
   images?: MemberImages;
   signedIn: boolean;
+  /** A group's Bluesky profile description, shown under its title. */
+  description?: string | null;
   children: ReactNode;
 }) {
   const titleImage = images?.titleImage ?? null;
@@ -234,6 +246,7 @@ export function MemberFrame({
               )}
             </Link>
           </h1>
+          {description && <p className="member-description">{description}</p>}
         </header>
         {children}
       </div>
