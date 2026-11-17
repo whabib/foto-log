@@ -70,6 +70,10 @@ export default function ProfileForm({
         />
         <fieldset className="field">
           <legend>Location</legend>
+          <p className="hint">
+            You can set any location you want. This is only used for display and will also allow others to find
+            you when they search on these locations.
+          </p>
           <label htmlFor="country">Country</label>
           <select id="country" name="country" value={values.country} onChange={(e) => set("country")(e.target.value)}>
             <option value="">Not shown</option>

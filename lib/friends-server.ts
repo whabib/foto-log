@@ -260,25 +260,32 @@ export async function removeFriend(user: CurrentUser, did: string): Promise<void
  * On a member's first sign-in, starts their Friends/Favorites with
  * @foto-log.com. Runs once per member: later sign-ins, or removing it,
  * don't add it again. If the add fails, it's tried again next sign-in.
+ * Returns whether this sign-in made them a member.
  */
-export async function welcomeNewMember(user: CurrentUser): Promise<void> {
+export async function welcomeNewMember(user: CurrentUser): Promise<boolean> {
   try {
     // One sign-in at a time per member, across servers, so an overlapping
     // first sign-in can't add @foto-log.com again after it's been removed.
-    await withLock(`welcome:${user.did}`, async () => {
+    return await withLock(`welcome:${user.did}`, async () => {
       const db = await getDb();
       const [known] = await db.select({ did: member.did }).from(member).where(eq(member.did, user.did)).limit(1);
-      if (known) return;
+      if (known) return false;
       const starter = await resolveActor(STARTER_FRIEND);
       if (!starter) {
         console.warn("Couldn't resolve the starter friend", { handle: STARTER_FRIEND });
-        return; // tried again next sign-in
+        return false; // tried again next sign-in
       }
       // The starter account shows up on lists once it has signed in itself.
       if (starter.did !== user.did) await addFriend(user, starter.did, { starter: true });
-      await db.insert(member).values({ did: user.did, handle: user.handle }).onConflictDoNothing();
+      const added = await db
+        .insert(member)
+        .values({ did: user.did, handle: user.handle })
+        .onConflictDoNothing()
+        .returning({ did: member.did });
+      return added.length > 0;
     });
   } catch (err) {
     console.error("Couldn't welcome new member", { did: user.did, err });
+    return false;
   }
 }

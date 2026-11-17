@@ -241,6 +241,17 @@ a {
   cursor: pointer;
 }
 
+.welcome-continue {
+  display: inline-block;
+  margin-top: 16px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  text-decoration: none;
+}
+
 .post-page {
   max-width: 720px;
   margin: 32px auto;
