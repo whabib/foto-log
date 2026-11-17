@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { getDb, withTryLock } from "@/lib/db";
-import { appState, member, photoIndex } from "@/lib/db/schema";
+import { appState, bannedMember, member, photoIndex } from "@/lib/db/schema";
 import { resolveActor } from "@/lib/identity";
 import { DEFAULT_JETSTREAM_URL, eventTimeUs, identityChange, jetstreamUrl, photoChange } from "@/lib/jetstream";
 import { assertValidPhotoRecord, type PhotoRecord } from "@/lib/photo-record";
@@ -156,7 +156,8 @@ export type IndexedPhoto = {
 
 /**
  * The newest photo of each of the `limit` members who posted most recently,
- * newest first. Only members who have signed in to foto-log are listed.
+ * newest first. Only members who have signed in to foto-log, and aren't
+ * banned, are listed.
  */
 export async function recentPhotos(limit: number): Promise<(IndexedPhoto & { name: string | null })[]> {
   const db = await getDb();
@@ -176,6 +177,7 @@ export async function recentPhotos(limit: number): Promise<(IndexedPhoto & { nam
       FROM ${photoIndex} p
       JOIN ${member} m ON m.did = p.did
       WHERE p.created_at <= now() + interval '5 minutes'
+        AND NOT EXISTS (SELECT 1 FROM ${bannedMember} b WHERE b.did = p.did)
       ORDER BY p.did, p.created_at DESC
     ) latest
     ORDER BY created_at DESC

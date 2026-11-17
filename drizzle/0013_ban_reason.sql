@@ -1,0 +1,1 @@
+ALTER TABLE "banned_member" ADD COLUMN "reason" text;

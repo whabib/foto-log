@@ -13,11 +13,14 @@ export default function AccountMenu({
   label,
   myPage,
   isGroup = false,
+  isAdmin = false,
 }: {
   label: string;
   myPage: string;
   /** The account is a group, so its menu has Group Management. */
   isGroup?: boolean;
+  /** The account is a site admin, so its menu has Admin. */
+  isAdmin?: boolean;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const pathname = usePathname();
@@ -71,6 +74,11 @@ export default function AccountMenu({
         {isGroup && (
           <li>
             <Link href="/settings/group">Group Management</Link>
+          </li>
+        )}
+        {isAdmin && (
+          <li>
+            <Link href="/admin">Admin</Link>
           </li>
         )}
         <li>

@@ -1,0 +1,716 @@
+{
+  "id": "39f5aad1-cc9c-48f5-85e9-e3484d13a74b",
+  "prevId": "efe5c463-9fac-48b4-b210-466634c1e9b5",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.app_state": {
+      "name": "app_state",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.banned_member": {
+      "name": "banned_member",
+      "schema": "",
+      "columns": {
+        "did": {
+          "name": "did",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "banned_by": {
+          "name": "banned_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "banned_at": {
+          "name": "banned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fotolog_group": {
+      "name": "fotolog_group",
+      "schema": "",
+      "columns": {
+        "did": {
+          "name": "did",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "join_policy": {
+          "name": "join_policy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.group_member": {
+      "name": "group_member",
+      "schema": "",
+      "columns": {
+        "group_did": {
+          "name": "group_did",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_did": {
+          "name": "member_did",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "group_member_member_idx": {
+          "name": "group_member_member_idx",
+          "columns": [
+            {
+              "expression": "member_did",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "group_member_group_did_fotolog_group_did_fk": {
+          "name": "group_member_group_did_fotolog_group_did_fk",
+          "tableFrom": "group_member",
+          "tableTo": "fotolog_group",
+          "columnsFrom": [
+            "group_did"
+          ],
+          "columnsTo": [
+            "did"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "group_member_group_did_member_did_pk": {
+          "name": "group_member_group_did_member_did_pk",
+          "columns": [
+            "group_did",
+            "member_did"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.group_post": {
+      "name": "group_post",
+      "schema": "",
+      "columns": {
+        "group_did": {
+          "name": "group_did",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rkey": {
+          "name": "rkey",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_did": {
+          "name": "member_did",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "group_post_group_did_rkey_pk": {
+          "name": "group_post_group_did_rkey_pk",
+          "columns": [
+            "group_did",
+            "rkey"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.group_post_claim": {
+      "name": "group_post_claim",
+      "schema": "",
+      "columns": {
+        "group_did": {
+          "name": "group_did",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "upload_date": {
+          "name": "upload_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_did": {
+          "name": "member_did",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "group_post_claim_group_did_upload_date_member_did_pk": {
+          "name": "group_post_claim_group_did_upload_date_member_did_pk",
+          "columns": [
+            "group_did",
+            "upload_date",
+            "member_did"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "group_post_claim_sequence": {
+          "name": "group_post_claim_sequence",
+          "nullsNotDistinct": false,
+          "columns": [
+            "group_did",
+            "upload_date",
+            "sequence"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.member": {
+      "name": "member",
+      "schema": "",
+      "columns": {
+        "did": {
+          "name": "did",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "joined_at": {
+          "name": "joined_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "backfilled_at": {
+          "name": "backfilled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "handle": {
+          "name": "handle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fotolog_name": {
+          "name": "fotolog_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "show_fotolog_name": {
+          "name": "show_fotolog_name",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "member_fotolog_name_unique": {
+          "name": "member_fotolog_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "fotolog_name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.member_settings": {
+      "name": "member_settings",
+      "schema": "",
+      "columns": {
+        "did": {
+          "name": "did",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "country": {
+          "name": "country",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "region": {
+          "name": "region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locality": {
+          "name": "locality",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "background_color": {
+          "name": "background_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "text_color": {
+          "name": "text_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "link_color": {
+          "name": "link_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_session": {
+      "name": "oauth_session",
+      "schema": "",
+      "columns": {
+        "sub": {
+          "name": "sub",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_state": {
+      "name": "oauth_state",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "oauth_state_created_at_idx": {
+          "name": "oauth_state_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.photo_index": {
+      "name": "photo_index",
+      "schema": "",
+      "columns": {
+        "did": {
+          "name": "did",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rkey": {
+          "name": "rkey",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cid": {
+          "name": "cid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_cid": {
+          "name": "image_cid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alt": {
+          "name": "alt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "caption": {
+          "name": "caption",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "upload_date": {
+          "name": "upload_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "indexed_at": {
+          "name": "indexed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "photo_index_created_at_idx": {
+          "name": "photo_index_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "photo_index_did_created_at_idx": {
+          "name": "photo_index_did_created_at_idx",
+          "columns": [
+            {
+              "expression": "did",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "photo_index_did_rkey_pk": {
+          "name": "photo_index_did_rkey_pk",
+          "columns": [
+            "did",
+            "rkey"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_session": {
+      "name": "user_session",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "did": {
+          "name": "did",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "handle": {
+          "name": "handle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "browser_id": {
+          "name": "browser_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_active_at": {
+          "name": "last_active_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "user_session_did_idx": {
+          "name": "user_session_did_idx",
+          "columns": [
+            {
+              "expression": "did",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_session_browser_idx": {
+          "name": "user_session_browser_idx",
+          "columns": [
+            {
+              "expression": "browser_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

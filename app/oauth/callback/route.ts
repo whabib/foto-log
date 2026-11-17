@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { lookupHandle, signInOnBrowser } from "@/lib/auth";
+import { endAllSessions, lookupHandle, signInOnBrowser } from "@/lib/auth";
+import { isBanned } from "@/lib/bans-server";
 import { baseUrl } from "@/lib/config";
 import { primaryName } from "@/lib/fotolog-name-server";
 import { welcomeNewMember } from "@/lib/friends-server";
@@ -25,6 +26,11 @@ export async function GET(request: NextRequest) {
   const client = await getOAuthClient();
   try {
     const { session } = await client.callback(params);
+    if (await isBanned(session.did)) {
+      // Drop the tokens just issued; a banned member can't sign in.
+      await endAllSessions(session.did);
+      return redirectTo("/login?error=banned");
+    }
     const handle = await lookupHandle(session);
     const signedIn = await signInOnBrowser(session.did, handle);
     if (!signedIn.ok) return redirectTo(signedIn.reason === "full" ? "/accounts?error=full" : "/login?error=failed");

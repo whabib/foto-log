@@ -4,6 +4,7 @@ import type { CurrentUser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { resolveActor, type Actor } from "@/lib/identity";
 import { primaryName } from "@/lib/fotolog-name-server";
+import { isBanned } from "@/lib/bans-server";
 import { claimGroupPost, forgetGroupPost, getGroup, membership, recordGroupPost, releaseGroupPost } from "@/lib/groups-server";
 import { getOAuthClient } from "@/lib/oauth/client";
 import { fetchFromPds } from "@/lib/safe-fetch";
@@ -154,7 +155,7 @@ export function longestPhotoUrl(identity: Identity, group: boolean): string {
 /** Where a group can't take a member's photo, and why. */
 async function groupCheck(user: CurrentUser, groupDid: string): Promise<void> {
   const group = await getGroup(groupDid);
-  if (!group) throw new PhotoError("not_found", "That account isn't a group anymore.");
+  if (!group || (await isBanned(groupDid))) throw new PhotoError("not_found", "That account isn't a group anymore.");
   if (groupDid !== user.did && (await membership(groupDid, user.did)) !== "member") {
     throw new PhotoError("forbidden", "Only members can post to this group.");
   }

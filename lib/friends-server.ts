@@ -37,6 +37,22 @@ export async function listFriends(actor: Actor, opts: { fresh?: boolean } = {}):
     const hit = listCache.get(actor.did);
     if (hit) return hit.value;
   }
+  return (await readFriends(actor)).friends;
+}
+
+/** How many are on `actor`'s Friends/Favorites list, or null if it couldn't all be read. */
+export async function friendCount(actor: Actor): Promise<number | null> {
+  const hit = listCache.get(actor.did);
+  if (hit) return hit.value.length;
+  const { friends, complete } = await readFriends(actor);
+  return complete ? friends.length : null;
+}
+
+/**
+ * Reads `actor`'s list, caching it once it's all read. If a page can't be
+ * read, returns what was read before it, not complete and not cached.
+ */
+async function readFriends(actor: Actor): Promise<{ friends: string[]; complete: boolean }> {
   const { jsonToLex } = await import("@atproto/lexicon");
   const friends: string[] = [];
   let cursor: string | undefined;
@@ -51,12 +67,12 @@ export async function listFriends(actor: Actor, opts: { fresh?: boolean } = {}):
       const res = await fetchFromPds(url);
       if (!res.ok) {
         console.warn("Couldn't list friends", { did: actor.did, status: res.status });
-        return friends;
+        return { friends, complete: false };
       }
       body = await res.json();
     } catch (err) {
       console.warn("Couldn't list friends", { did: actor.did, err });
-      return friends;
+      return { friends, complete: false };
     }
     const records = body.records ?? [];
     for (const r of records) {
@@ -67,7 +83,7 @@ export async function listFriends(actor: Actor, opts: { fresh?: boolean } = {}):
     cursor = body.cursor;
   }
   listCache.set(actor.did, friends);
-  return friends;
+  return { friends, complete: true };
 }
 
 /**
@@ -108,8 +124,9 @@ export async function isOnList(viewerDid: string, did: string): Promise<boolean>
 
 /**
  * The members among `dids`, each with their handle and newest photo, from
- * the member table and the photo index. DIDs that aren't foto-log members
- * are left out: they stay on the list and show up once they sign in.
+ * the member table and the photo index. DIDs that aren't foto-log members,
+ * or are banned, are left out: they stay on the list and show up once they
+ * sign in, or the ban is lifted.
  */
 export async function memberRows(dids: string[]): Promise<FriendRow[]> {
   if (dids.length === 0) return [];
@@ -131,7 +148,8 @@ export async function memberRows(dids: string[]): Promise<FriendRow[]> {
        WHERE did = m.did AND created_at <= now() + interval '5 minutes'
        ORDER BY created_at DESC LIMIT 1
      ) p ON true
-     WHERE m.did = ANY($1::text[])`,
+     WHERE m.did = ANY($1::text[])
+       AND NOT EXISTS (SELECT 1 FROM banned_member b WHERE b.did = m.did)`,
     [dids],
   );
   return rows.map((r) => {
