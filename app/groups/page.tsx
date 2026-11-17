@@ -41,7 +41,7 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
                     <img src={g.latest.thumbnail} alt={g.latest.alt} loading="lazy" />
                   ) : g.avatar ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={g.avatar} alt="" loading="lazy" />
+                    <img src={g.avatar} alt="" loading="lazy" className="group-entry-avatar" />
                   ) : (
                     <span className="group-entry-empty" aria-hidden="true" />
                   )}
@@ -52,6 +52,7 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
                   </h2>
                   {g.latest && <p className="group-entry-when">Newest photo {timeAgo(g.latest.createdAt, now)}</p>}
                   {g.description && <p className="group-entry-description">{g.description}</p>}
+                  {g.location && <p className="group-entry-location">{g.location}</p>}
                   <GroupBox
                     groupDid={g.did}
                     members={g.members}

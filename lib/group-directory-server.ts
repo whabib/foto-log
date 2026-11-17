@@ -1,6 +1,7 @@
 import "server-only";
 import { blueskyProfile } from "@/lib/bsky-profile";
 import { getPool } from "@/lib/db";
+import { formatLocation } from "@/lib/geo";
 import type { JoinPolicy, MembershipStatus } from "@/lib/groups-server";
 import { photoKeyPath, thumbnailUrl } from "@/lib/photos/urls";
 
@@ -17,6 +18,8 @@ export type DirectoryGroup = {
   /** The group's Bluesky profile description and avatar. */
   description: string | null;
   avatar: string | null;
+  /** Its location from its member page settings, if it set one. */
+  location: string | null;
   /** Its newest photo, if it has any. */
   latest: { path: string; thumbnail: string; alt: string; createdAt: string } | null;
   /** Where the viewer stands in it; null if they're not in it or not signed in. */
@@ -47,13 +50,18 @@ export async function groupDirectory(
       alt: string | null;
       created_at: Date | null;
       viewer: string | null;
+      country: string | null;
+      region: string | null;
+      locality: string | null;
     }>(
       `SELECT g.did, g.join_policy, m.handle, m.fotolog_name, m.show_fotolog_name,
               (SELECT count(*) FROM group_member gm WHERE gm.group_did = g.did AND gm.status = 'member') AS members,
               p.rkey, p.image_cid, p.alt, p.created_at,
-              (SELECT v.status FROM group_member v WHERE v.group_did = g.did AND v.member_did = $3) AS viewer
+              (SELECT v.status FROM group_member v WHERE v.group_did = g.did AND v.member_did = $3) AS viewer,
+              s.country, s.region, s.locality
        FROM fotolog_group g
        LEFT JOIN member m ON m.did = g.did
+       LEFT JOIN member_settings s ON s.did = g.did
        LEFT JOIN LATERAL (
          SELECT rkey, image_cid, alt, created_at FROM photo_index
          WHERE did = g.did AND created_at <= now() + interval '5 minutes'
@@ -80,6 +88,7 @@ export async function groupDirectory(
         members: Number(r.members),
         description: profiles[i].description,
         avatar: profiles[i].avatar,
+        location: r.country ? formatLocation({ country: r.country, region: r.region, locality: r.locality }) : null,
         latest:
           r.rkey && r.image_cid && r.created_at
             ? {
