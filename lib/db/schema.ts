@@ -174,3 +174,11 @@ export const bannedMember = pgTable("banned_member", {
   bannedBy: text("banned_by").notNull(),
   bannedAt: timestamp("banned_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Members an admin has made admins, beside the built-in ones in lib/admin-server.ts. */
+export const siteAdmin = pgTable("site_admin", {
+  did: text("did").primaryKey(),
+  /** The admin who made them one. */
+  grantedBy: text("granted_by").notNull(),
+  grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+});

@@ -304,6 +304,16 @@ a {
   color: var(--error);
 }
 
+.admin-role {
+  font-weight: 600;
+}
+
+.admin-actions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .admin-pages {
   display: flex;
   justify-content: space-between;

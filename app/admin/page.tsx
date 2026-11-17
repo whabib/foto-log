@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { ADMIN_PAGE_SIZE, adminMembers, isAdmin } from "@/lib/admin-server";
 import { memberPath } from "@/lib/photos/urls";
-import BanButton from "./BanButton";
+import MemberActions from "./MemberActions";
 
 export const metadata: Metadata = { title: "Admin · foto-log" };
 
@@ -43,6 +43,9 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
                 Following
               </th>
               <th scope="col">Status</th>
+              <th scope="col">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -61,8 +64,13 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
                   <td className="num">{m.photos}</td>
                   <td className="num">{m.following ?? "?"}</td>
                   <td>
-                    {m.banned && <span className="admin-banned">Banned </span>}
-                    {m.did !== user.did && <BanButton did={m.did} label={label} banned={m.banned} />}
+                    {m.banned && <span className="admin-banned">Banned</span>}
+                    {m.admin && <span className="admin-role">{m.admin === "built-in" ? "Admin (built in)" : "Admin"}</span>}
+                  </td>
+                  <td>
+                    {m.did !== user.did && (
+                      <MemberActions did={m.did} label={label} banned={m.banned} admin={m.admin} />
+                    )}
                   </td>
                 </tr>
               );
