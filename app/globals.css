@@ -511,15 +511,16 @@ a {
   border-top: 1px solid var(--border);
 }
 
+/* 4:3, like every other photo thumbnail on the site. */
 .group-entry-photo {
   flex: none;
-  width: 120px;
+  width: 160px;
 }
 
 .group-entry-photo img,
 .group-entry-empty {
   display: block;
-  width: 120px;
+  width: 160px;
   height: 120px;
   object-fit: cover;
   border: 1px solid var(--border);
@@ -552,6 +553,13 @@ a {
   overflow-wrap: anywhere;
 }
 
+.group-entry-location {
+  margin: 0 0 8px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .group-entry .group-box {
   margin: 8px 0 0;
 }
@@ -560,8 +568,8 @@ a {
   .group-entry-photo,
   .group-entry-photo img,
   .group-entry-empty {
-    width: 80px;
-    height: 80px;
+    width: 96px;
+    height: 72px;
   }
 }
 
