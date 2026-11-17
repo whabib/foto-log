@@ -21,6 +21,7 @@ import {
   memberImageUrl,
   type MemberRef,
   memberPath,
+  photoCalendarPath,
   photoKeyPath,
   thumbnailUrl,
 } from "@/lib/photos/urls";
@@ -139,9 +140,8 @@ export default function MemberPage(props: MemberPageProps) {
               />
             )}
 
-            {/* The archive page comes later; until then this goes to the latest photo, like View all photos. */}
             <h3 className="rail-heading">
-              <Link href={memberPath(owner)}>Recent Photos</Link>
+              <Link href={photoCalendarPath(owner)}>Recent Photos</Link>
             </h3>
             {recent.length > 0 ? (
               <ul className="recent-photos">
@@ -158,9 +158,8 @@ export default function MemberPage(props: MemberPageProps) {
             ) : (
               <p className="rail-empty">No photos yet.</p>
             )}
-            {/* The archive page comes later; until then this goes to the latest photo. */}
             <p className="rail-more">
-              » <Link href={memberPath(owner)}>View all photos</Link>
+              » <Link href={photoCalendarPath(owner)}>View all photos</Link>
             </p>
           </aside>
 

@@ -86,6 +86,16 @@ export function memberPath(actor: MemberRef): string {
   return `/${memberSegment(actor)}`;
 }
 
+/**
+ * Path of a member's photo calendar, e.g. /@alice.bsky.social/photos, at a
+ * month ("YYYY-MM") or, on a group, the week starting a Sunday ("YYYY-MM-DD").
+ */
+export function photoCalendarPath(actor: MemberRef, at: { month?: string; week?: string } = {}): string {
+  const base = `${memberPath(actor)}/photos`;
+  if (at.week) return `${base}?week=${at.week}`;
+  return at.month ? `${base}?month=${at.month}` : base;
+}
+
 /** Path of a member's full Friends/Favorites list, e.g. /@alice.bsky.social/friends. */
 export function friendsPath(actor: MemberRef): string {
   return `${memberPath(actor)}/friends`;
