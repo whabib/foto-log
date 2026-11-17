@@ -9,6 +9,7 @@ import MemberActions from "./MemberActions";
 export const metadata: Metadata = { title: "Admin · foto-log" };
 
 const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
+const dateTimeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
 
 /** The admin tool: every member, for admins only. */
 export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
@@ -27,7 +28,7 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
       <h1>Admin</h1>
       <h2>Members</h2>
       <p className="muted">
-        {total} {total === 1 ? "member" : "members"}, newest first. Signup dates are in UTC.
+        {total} {total === 1 ? "member" : "members"}, newest first. Dates and times are in UTC.
       </p>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -69,8 +70,14 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
                   <td className="num">{m.following ?? "?"}</td>
                   <td>{m.groupMembers !== null ? "Yes" : ""}</td>
                   <td className="num">{m.groupMembers ?? ""}</td>
-                  <td>
+                  <td className="admin-status">
                     {m.banned && <span className="admin-banned">Banned</span>}
+                    {m.ban && (
+                      <span className="admin-ban-detail">
+                        {dateTimeFormat.format(m.ban.at)} by {m.ban.byHandle ? `@${m.ban.byHandle}` : m.ban.by}
+                        {m.ban.reason && <>: &ldquo;{m.ban.reason}&rdquo;</>}
+                      </span>
+                    )}
                     {m.admin && <span className="admin-role">{m.admin === "built-in" ? "Admin (built in)" : "Admin"}</span>}
                   </td>
                   <td>

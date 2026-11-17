@@ -173,6 +173,8 @@ export const bannedMember = pgTable("banned_member", {
   /** The admin who banned them. */
   bannedBy: text("banned_by").notNull(),
   bannedAt: timestamp("banned_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Why, in the admin's words. Null only for bans from before reasons were asked for. */
+  reason: text("reason"),
 });
 
 /** Members an admin has made admins, beside the built-in ones in lib/admin-server.ts. */

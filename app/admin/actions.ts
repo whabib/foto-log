@@ -8,12 +8,12 @@ import { BanError, banMember, unbanMember } from "@/lib/bans-server";
 export type MemberChange = "ban" | "unban" | "make-admin" | "remove-admin";
 export type ChangeResult = { ok: true } | { ok: false; message: string };
 
-/** Bans, unbans, or makes or removes an admin. Only admins can. */
-export async function changeMember(did: string, change: MemberChange): Promise<ChangeResult> {
+/** Bans (for `reason`), unbans, or makes or removes an admin. Only admins can. */
+export async function changeMember(did: string, change: MemberChange, reason = ""): Promise<ChangeResult> {
   const user = await getCurrentUser();
   if (!user || !(await isAdmin(user.did))) return { ok: false, message: "Only admins can do that." };
   try {
-    if (change === "ban") await banMember(user.did, did);
+    if (change === "ban") await banMember(user.did, did, typeof reason === "string" ? reason : "");
     else if (change === "unban") await unbanMember(did);
     else if (change === "make-admin") await setAdmin(user.did, did, true);
     else if (change === "remove-admin") await setAdmin(user.did, did, false);

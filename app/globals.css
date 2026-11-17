@@ -305,6 +305,17 @@ a {
   color: var(--error);
 }
 
+.admin-table td.admin-status {
+  white-space: normal;
+  min-width: 12em;
+  max-width: 24em;
+}
+
+.admin-ban-detail {
+  display: block;
+  font-size: 0.8125rem;
+}
+
 .admin-role {
   font-weight: 600;
 }

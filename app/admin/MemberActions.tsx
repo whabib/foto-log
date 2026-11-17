@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { BAN_REASON_MAX } from "@/lib/ban-limits";
 import { changeMember, type MemberChange } from "./actions";
 
 type Props = {
@@ -12,9 +13,7 @@ type Props = {
   admin: "built-in" | "made" | null;
 };
 
-const QUESTIONS: Record<MemberChange, (label: string) => string> = {
-  ban: (l) =>
-    `Ban ${l}? They'll be signed out and can't sign in again, and their page and photos are hidden from foto-log.`,
+const QUESTIONS: Record<Exclude<MemberChange, "ban">, (label: string) => string> = {
   unban: (l) => `Lift the ban on ${l}? They'll be able to sign in again, and their page and photos will show again.`,
   "make-admin": (l) => `Make ${l} an admin? They'll be able to see this page, ban members and make other admins.`,
   "remove-admin": (l) => `Remove ${l} as an admin?`,
@@ -44,11 +43,21 @@ export default function MemberActions({ did, label, banned, admin }: Props) {
         : ["make-admin", "ban"];
 
   const run = (change: MemberChange) => {
-    if (!confirm(QUESTIONS[change](label))) return;
+    let reason = "";
+    if (change === "ban") {
+      const answer = prompt(
+        `Ban ${label}? They'll be signed out and can't sign in again, and their page and photos are hidden from foto-log.\n\n` +
+          "Briefly, why?",
+      );
+      if (answer === null) return;
+      reason = answer.trim();
+      if (!reason) return setError("Give a reason for the ban.");
+      if (reason.length > BAN_REASON_MAX) return setError(`Keep the reason under ${BAN_REASON_MAX} characters.`);
+    } else if (!confirm(QUESTIONS[change](label))) return;
     setError(null);
     setRunning(change);
     start(async () => {
-      const result = await changeMember(did, change);
+      const result = await changeMember(did, change, reason);
       if (result.ok) router.refresh();
       else setError(result.message);
     });

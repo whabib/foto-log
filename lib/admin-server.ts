@@ -69,6 +69,8 @@ export type AdminMemberRow = {
   /** How many are on their Friends/Favorites list; null if it couldn't be read. */
   following: number | null;
   banned: boolean;
+  /** Who banned them, when and why; null unless banned. */
+  ban: { by: string; byHandle: string | null; at: Date; reason: string | null } | null;
   /** How many members the group has, not counting requests; null if it isn't a group. */
   groupMembers: number | null;
   /** "built-in" for a built-in admin, "made" for one made on the admin page. */
@@ -93,17 +95,24 @@ export async function adminMembers(page: number): Promise<{ rows: AdminMemberRow
       joined_at: Date;
       photos: string;
       banned: boolean;
+      banned_by: string | null;
+      banned_by_handle: string | null;
+      banned_at: Date | null;
+      ban_reason: string | null;
       made_admin: boolean;
       group_members: string | null;
     }>(
       `SELECT m.did, m.handle, m.fotolog_name, m.show_fotolog_name, m.joined_at,
               (SELECT count(*) FROM photo_index p WHERE p.did = m.did) AS photos,
-              EXISTS (SELECT 1 FROM banned_member b WHERE b.did = m.did) AS banned,
+              b.did IS NOT NULL AS banned, b.banned_by, bm.handle AS banned_by_handle,
+              b.banned_at, b.reason AS ban_reason,
               EXISTS (SELECT 1 FROM site_admin a WHERE a.did = m.did) AS made_admin,
               CASE WHEN EXISTS (SELECT 1 FROM fotolog_group g WHERE g.did = m.did) THEN
                 (SELECT count(*) FROM group_member gm WHERE gm.group_did = m.did AND gm.status = 'member')
               END AS group_members
        FROM member m
+       LEFT JOIN banned_member b ON b.did = m.did
+       LEFT JOIN member bm ON bm.did = b.banned_by
        ORDER BY m.joined_at DESC, m.did
        LIMIT $1 OFFSET $2`,
       [ADMIN_PAGE_SIZE, (page - 1) * ADMIN_PAGE_SIZE],
@@ -131,6 +140,10 @@ export async function adminMembers(page: number): Promise<{ rows: AdminMemberRow
       photos: Number(r.photos),
       following: following[i],
       banned: r.banned,
+      ban:
+        r.banned && r.banned_by && r.banned_at
+          ? { by: r.banned_by, byHandle: r.banned_by_handle, at: r.banned_at, reason: r.ban_reason }
+          : null,
       groupMembers: r.group_members === null ? null : Number(r.group_members),
       admin: builtIn[i] ? "built-in" : r.made_admin ? "made" : null,
     })),
