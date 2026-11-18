@@ -77,24 +77,46 @@ jobs:
           registry-user: oauth2accesstoken
           registry-password: ${{ steps.gcp.outputs.access_token }}
 
+      # Next.js ships its own compiled copies of some packages (tar, ws, zod...) under
+      # next/dist/compiled, with no version in their package.json. Scanners read that
+      # as version 0.0.0 and report every CVE those packages ever had. They're listed
+      # in the report but not counted; Next.js updates them with each release.
       - name: Count findings
         id: count
         env:
           SARIF: ${{ runner.temp }}/scout.sarif
+          IMAGE_REF: ${{ steps.build.outputs.image }}
         run: |
           if [ ! -s "$SARIF" ]; then
-            echo "::error::Docker Scout wrote no results, so there are none this week."
+            echo "::error::Docker Scout wrote no results, so there are none this time."
             exit 1
           fi
-          jq -c '.runs[0].results[0], .runs[0].tool.driver.rules[0]' "$SARIF" # TEMPORARY: inspect the format
-          blocking=$(jq '[.runs[].results[].ruleId] | unique | length' "$SARIF")
+          jq '
+            [.runs[].results[] | {
+              cve: .ruleId,
+              severity: (.message.text | capture("Severity\\s*: (?<s>[A-Z]+)").s // "?"),
+              package: (.message.text | capture("Package\\s*: (?<p>\\S+)").p // "?"),
+              fixed: (.message.text | capture("Fixed version\\s*: (?<f>[^\\n]*?)\\s*\\n").f // "?"),
+              path: (.locations[0].physicalLocation.artifactLocation.uri // "")
+            }]
+            | map(. + {bundled: ((.path | contains("/node_modules/next/dist/compiled/")) and (.package | endswith("@0.0.0")))})
+            | unique_by([.cve, .package])
+          ' "$SARIF" > "$RUNNER_TEMP/findings.json"
+          blocking=$(jq '[.[] | select(.bundled | not)] | length' "$RUNNER_TEMP/findings.json")
+          bundled=$(jq '[.[] | select(.bundled)] | length' "$RUNNER_TEMP/findings.json")
           echo "blocking=$blocking" >> "$GITHUB_OUTPUT"
           {
-            echo "Critical, high and medium CVEs in \`${{ steps.build.outputs.image }}\`: $blocking"
+            echo "Critical, high and medium findings in \`$IMAGE_REF\`: **$blocking**"
             echo
-            jq -r '[.runs[].results[] | "- \(.ruleId): \(.message.text | split("\n")[0])"] | unique | .[]' "$SARIF"
+            if [ "$blocking" -gt 0 ]; then
+              echo "| Severity | CVE | Package | Fixed in |"
+              echo "| --- | --- | --- | --- |"
+              jq -r '[.[] | select(.bundled | not)] | sort_by({"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2}[.severity]) | .[] | "| \(.severity) | \(.cve) | \(.package) | \(.fixed) |"' "$RUNNER_TEMP/findings.json"
+              echo
+            fi
+            echo "Not counted: $bundled findings in unversioned copies bundled inside Next.js ($(jq -r '[.[] | select(.bundled) | .package | sub("^pkg:npm/"; "") | sub("@0.0.0$"; "")] | unique | join(", ")' "$RUNNER_TEMP/findings.json"))."
           } > "$RUNNER_TEMP/report.md"
-          cat "$RUNNER_TEMP/report.md"
+          cat "$RUNNER_TEMP/report.md" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Update the tracking issue
         env:
