@@ -91,8 +91,9 @@ jobs:
           SHA: ${{ steps.pr.outputs.sha }}
         run: |
           gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-          docker build --pull -t "$IMAGE:$SHA" .
-          docker push "$IMAGE:$SHA"
+          # buildx's container builder, so the image carries an SBOM and provenance attestation.
+          docker buildx create --use --driver docker-container
+          docker buildx build --pull --provenance=mode=max --sbom=true --push -t "$IMAGE:$SHA" .
 
       - name: Deploy with no traffic
         if: inputs.action == 'deploy'
