@@ -77,13 +77,21 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v3
 
+      # The Dockerfile builds on Docker Hardened Images, which need a Docker Hub sign-in to pull.
+      - name: Sign in to dhi.io
+        if: inputs.action == 'deploy'
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
+        run: echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+
       - name: Build and push image
         if: inputs.action == 'deploy'
         env:
           SHA: ${{ steps.pr.outputs.sha }}
         run: |
           gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-          docker build -t "$IMAGE:$SHA" .
+          docker build --pull -t "$IMAGE:$SHA" .
           docker push "$IMAGE:$SHA"
 
       - name: Deploy with no traffic
@@ -99,6 +107,14 @@ jobs:
             --tag="$TAG" \
             --quiet
           echo "Deployed PR #${{ inputs.pr }} ($SHA) as tag $TAG with no traffic." >> "$GITHUB_STEP_SUMMARY"
+
+      # A report only: a finding never holds back a preview.
+      - name: Vulnerability scan
+        if: inputs.action == 'deploy'
+        continue-on-error: true
+        env:
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: scripts/image-scan.sh "$IMAGE:$SHA" --wait
 
       - name: Send all traffic to the PR revision
         if: inputs.action == 'promote'

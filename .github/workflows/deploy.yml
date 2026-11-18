@@ -34,9 +34,16 @@ jobs:
 
       - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
+      # The Dockerfile builds on Docker Hardened Images, which need a Docker Hub sign-in to pull.
+      - name: Sign in to dhi.io
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
+        run: echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+
       - name: Build and push image
         run: |
-          docker build -t "$IMAGE:${{ github.sha }}" .
+          docker build --pull -t "$IMAGE:${{ github.sha }}" .
           docker push "$IMAGE:${{ github.sha }}"
 
       - name: Deploy to Cloud Run
@@ -57,3 +64,8 @@ jobs:
             --region="$REGION" \
             --to-latest \
             --quiet
+
+      # A report only: a finding never holds back a deploy.
+      - name: Vulnerability scan
+        continue-on-error: true
+        run: scripts/image-scan.sh "$IMAGE:${{ github.sha }}" --wait

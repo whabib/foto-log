@@ -1,0 +1,82 @@
+name: Weekly image scan
+
+# Builds main every week on the latest Docker Hardened Images base, pushes
+# it (without deploying) so Artifact Registry scans it, and keeps one issue
+# up to date: opened or updated while there are critical, high or medium
+# findings, closed once there are none. A fresh build each week also shows
+# whether simply redeploying would clear findings that the base has fixed.
+
+on:
+  schedule:
+    - cron: "17 14 * * 1" # Mondays, 14:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: image-scan
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+
+env:
+  REGION: us-central1
+  IMAGE: us-central1-docker.pkg.dev/foto-log-app/foto-log/web
+  ISSUE_TITLE: "Image vulnerabilities: critical, high or medium findings"
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/367642066122/locations/global/workloadIdentityPools/github/providers/github
+          service_account: github-deployer@foto-log-app.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Sign in to dhi.io
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
+        run: echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+
+      - name: Build and push image
+        id: build
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          tag="scan-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          docker build --pull -t "$IMAGE:$tag" .
+          docker push "$IMAGE:$tag"
+          echo "image=$IMAGE:$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Vulnerability scan
+        id: scan
+        env:
+          SCAN_REPORT: ${{ runner.temp }}/scan.md
+        run: scripts/image-scan.sh "${{ steps.build.outputs.image }}" --wait
+
+      - name: Update the tracking issue
+        if: steps.scan.outputs.blocking != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCAN_REPORT: ${{ runner.temp }}/scan.md
+          BLOCKING: ${{ steps.scan.outputs.blocking }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          existing=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [ "$BLOCKING" -gt 0 ]; then
+            { echo "The weekly scan of main found findings to fix."; echo; cat "$SCAN_REPORT"; echo; echo "Run: $RUN_URL"; } > "$RUNNER_TEMP/body.md"
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --body-file "$RUNNER_TEMP/body.md"
+            else
+              gh issue create --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/body.md"
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "The weekly scan found no critical, high or medium findings. $RUN_URL"
+          fi
