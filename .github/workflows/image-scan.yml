@@ -86,6 +86,7 @@ jobs:
             echo "::error::Docker Scout wrote no results, so there are none this week."
             exit 1
           fi
+          jq -c '.runs[0].results[0], .runs[0].tool.driver.rules[0]' "$SARIF" # TEMPORARY: inspect the format
           blocking=$(jq '[.runs[].results[].ruleId] | unique | length' "$SARIF")
           echo "blocking=$blocking" >> "$GITHUB_OUTPUT"
           {
