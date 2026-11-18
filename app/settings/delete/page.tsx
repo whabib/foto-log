@@ -41,8 +41,11 @@ export default async function DeleteAccountPage() {
             <li>you&apos;re signed out of foto-log everywhere</li>
           </ul>
           <p>
-            Your photos, Friends/Favorites and page images are kept in your Bluesky repository. Leave the box below
-            checked to delete them too. Unchecked, signing in again brings them back.
+            Metadata about your photos, your Friends/Favorites list, and images related to your page customization
+            (like your Title Image and Wallpaper) are kept in your Bluesky repository. If you check the box below,
+            we will remove that data as well. Removing this information will not change your Bluesky account. If you
+            uncheck the box, then we will leave that information there and if you come back to foto-log, we will 
+            be able to recreate your account with your photo history intact.
           </p>
           <p className="muted">
             Your Bluesky account isn&apos;t touched, nor anything posted to Bluesky: the posts shared with your
