@@ -10,6 +10,7 @@ export default function SettingsNav({ isGroup }: { isGroup: boolean }) {
     { href: "/settings", label: "Profile" },
     ...(isGroup ? [{ href: "/settings/group", label: "Group Management" }] : []),
     { href: "/settings/customize", label: "Member Page Customization" },
+    { href: "/settings/delete", label: "Delete Account" },
   ];
   return (
     <nav className="settings-nav" aria-label="Settings">

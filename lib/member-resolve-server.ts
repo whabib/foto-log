@@ -2,6 +2,7 @@ import "server-only";
 import { isValidDid } from "@atproto/syntax";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { isClosed } from "@/lib/account-delete-server";
 import { isBanned } from "@/lib/bans-server";
 import { didForName, primaryName } from "@/lib/fotolog-name-server";
 import { looksLikeName } from "@/lib/fotolog-name";
@@ -18,7 +19,7 @@ export async function withName(actor: Actor): Promise<Member> {
 
 /**
  * Resolves a member page's URL segment (@name, @handle or DID) to the
- * member, or null (also for a banned member). If the segment isn't the member's primary one, redirects
+ * member, or null (also for a banned member, or one who deleted their foto-log). If the segment isn't the member's primary one, redirects
  * to the same page under it, keeping the rest of the path (`rest`, e.g.
  * "/2026-11-16" or "/friends").
  */
@@ -32,8 +33,8 @@ export const resolveMemberPage = cache(async (actorParam: string, rest = ""): Pr
   } else {
     actor = await resolveActor(id);
   }
-  // A banned member's pages are gone from foto-log.
-  if (!actor || (await isBanned(actor.did))) return null;
+  // A banned member's pages are gone from foto-log, and so are those of a member who deleted theirs.
+  if (!actor || (await isBanned(actor.did)) || (await isClosed(actor.did))) return null;
   const owner = await withName(actor);
   const canonical = memberPath(owner);
   let given: string;

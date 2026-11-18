@@ -60,7 +60,7 @@ export const member = pgTable("member", {
   backfilledAt: timestamp("backfilled_at", { withTimezone: true }),
   /** The member's verified handle as last seen, or null if unknown or invalid. */
   handle: text("handle"),
-  /** The member's Fotolog name, lowercase and unique; set once, never released. */
+  /** The member's Fotolog name, lowercase and unique; set once, released only when they delete their foto-log. */
   fotologName: text("fotolog_name").unique(),
   /** Whether the Fotolog name, rather than the Bluesky handle, is the member's primary name. */
   showFotologName: boolean("show_fotolog_name").notNull().default(true),
@@ -184,3 +184,15 @@ export const siteAdmin = pgTable("site_admin", {
   grantedBy: text("granted_by").notNull(),
   grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Members who deleted their foto-log. Their pages stay hidden until they sign
+ * in again, and their Fotolog name is held for them for a while so nobody
+ * else can take it.
+ */
+export const closedMember = pgTable("closed_member", {
+  did: text("did").primaryKey(),
+  /** The Fotolog name they had, held for NAME_HOLD_DAYS; null if they had none. */
+  fotologName: text("fotolog_name"),
+  closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("closed_member_name_idx").on(t.fotologName)]);

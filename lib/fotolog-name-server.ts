@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { cache } from "react";
 import { getDb } from "@/lib/db";
 import { member } from "@/lib/db/schema";
+import { isNameHeld } from "@/lib/account-delete-server";
 import { nameProblem, normalizeName } from "@/lib/fotolog-name";
 
 /** A member's Fotolog name and whether it's their primary name. */
@@ -43,21 +44,25 @@ export const didForName = cache(async (name: string): Promise<string | null> => 
 
 export type SetNameResult = { ok: true; name: string } | { ok: false; message: string };
 
-/** Whether `input` could be set as a Fotolog name right now. */
-export async function checkName(input: string): Promise<SetNameResult> {
+/**
+ * Whether `input` could be set as a Fotolog name right now, by `did` if
+ * given. A name a deleted member had is held for them for a while.
+ */
+export async function checkName(input: string, did?: string): Promise<SetNameResult> {
   const name = normalizeName(input);
   const problem = nameProblem(name);
   if (problem) return { ok: false, message: problem };
-  if (await didForName(name)) return { ok: false, message: "That name is taken." };
+  if ((await didForName(name)) || (await isNameHeld(name, did))) return { ok: false, message: "That name is taken." };
   return { ok: true, name };
 }
 
 /**
  * Sets the member's Fotolog name, once, and makes it their primary name.
- * Names are never released, so a name stays with its member for good.
+ * A name stays with its member until they delete their foto-log, and is
+ * held for them for NAME_HOLD_DAYS after that.
  */
 export async function setFotologName(did: string, input: string): Promise<SetNameResult> {
-  const checked = await checkName(input);
+  const checked = await checkName(input, did);
   if (!checked.ok) return checked;
   const db = await getDb();
   try {
