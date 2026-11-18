@@ -1,0 +1,135 @@
+name: Image scan
+
+# Twice a week (and on demand from the Actions tab), builds main on the
+# latest Docker Hardened Images base, pushes it without deploying, and scans
+# it with Docker Scout. Scout reads the hardened base's VEX statements, so
+# CVEs Docker has shown don't affect the image aren't reported. (Artifact
+# Registry's own scanner can't read these images: they have no os-release.)
+# Keeps one issue up to date: opened or commented on while there are
+# critical, high or medium findings, closed once there are none.
+
+on:
+  schedule:
+    - cron: "17 14 * * 1,4" # Mondays and Thursdays, 14:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: image-scan
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+
+env:
+  REGION: us-central1
+  IMAGE: us-central1-docker.pkg.dev/foto-log-app/foto-log/web
+  ISSUE_TITLE: "Image vulnerabilities: critical, high or medium findings"
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: google-github-actions/auth@v3
+        id: gcp
+        with:
+          workload_identity_provider: projects/367642066122/locations/global/workloadIdentityPools/github/providers/github
+          service_account: github-deployer@foto-log-app.iam.gserviceaccount.com
+          token_format: access_token
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # The same Docker Hub account pulls the hardened images (dhi.io) and runs Scout (docker.io).
+      - name: Sign in to dhi.io and Docker Hub
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
+        run: |
+          echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+          echo "$DHI_TOKEN" | docker login --username "$DHI_USERNAME" --password-stdin
+
+      # Provenance and an SBOM let Scout tell the hardened base from our own layers,
+      # and apply the base's VEX statements. The default builder can't attach them.
+      - name: Build and push image
+        id: build
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker buildx create --use --driver docker-container
+          tag="scan-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          docker buildx build --pull --provenance=mode=max --sbom=true --push -t "$IMAGE:$tag" .
+          echo "image=$IMAGE:$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Scan with Docker Scout
+        uses: docker/scout-action@5dae9c7571dd0f3de81f5b501240c593c13c3eb6 # v1.9.3
+        with:
+          command: cves
+          image: registry://${{ steps.build.outputs.image }}
+          platform: linux/amd64
+          only-severities: critical,high,medium
+          sarif-file: ${{ runner.temp }}/scout.sarif
+          summary: true
+          write-comment: false
+          registry-user: oauth2accesstoken
+          registry-password: ${{ steps.gcp.outputs.access_token }}
+
+      # Next.js ships its own compiled copies of some packages (tar, ws, zod...) under
+      # next/dist/compiled, with no version in their package.json. Scanners read that
+      # as version 0.0.0 and report every CVE those packages ever had. They're listed
+      # in the report but not counted; Next.js updates them with each release.
+      - name: Count findings
+        id: count
+        env:
+          SARIF: ${{ runner.temp }}/scout.sarif
+          IMAGE_REF: ${{ steps.build.outputs.image }}
+        run: |
+          if [ ! -s "$SARIF" ]; then
+            echo "::error::Docker Scout wrote no results, so there are none this time."
+            exit 1
+          fi
+          jq '
+            [.runs[].results[] | {
+              cve: .ruleId,
+              severity: (.message.text | capture("Severity\\s*: (?<s>[A-Z]+)").s // "?"),
+              package: (.message.text | capture("Package\\s*: (?<p>\\S+)").p // "?"),
+              fixed: (.message.text | capture("Fixed version\\s*: (?<f>[^\\n]*?)\\s*\\n").f // "?"),
+              path: (.locations[0].physicalLocation.artifactLocation.uri // "")
+            }]
+            | map(. + {bundled: ((.path | contains("/node_modules/next/dist/compiled/")) and (.package | endswith("@0.0.0")))})
+            | unique_by([.cve, .package])
+          ' "$SARIF" > "$RUNNER_TEMP/findings.json"
+          blocking=$(jq '[.[] | select(.bundled | not)] | length' "$RUNNER_TEMP/findings.json")
+          bundled=$(jq '[.[] | select(.bundled)] | length' "$RUNNER_TEMP/findings.json")
+          echo "blocking=$blocking" >> "$GITHUB_OUTPUT"
+          {
+            echo "Critical, high and medium findings in \`$IMAGE_REF\`: **$blocking**"
+            echo
+            if [ "$blocking" -gt 0 ]; then
+              echo "| Severity | CVE | Package | Fixed in |"
+              echo "| --- | --- | --- | --- |"
+              jq -r '[.[] | select(.bundled | not)] | sort_by({"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2}[.severity]) | .[] | "| \(.severity) | \(.cve) | \(.package) | \(.fixed) |"' "$RUNNER_TEMP/findings.json"
+              echo
+            fi
+            echo "Not counted: $bundled findings in unversioned copies bundled inside Next.js ($(jq -r '[.[] | select(.bundled) | .package | sub("^pkg:npm/"; "") | sub("@0.0.0$"; "")] | unique | join(", ")' "$RUNNER_TEMP/findings.json"))."
+          } > "$RUNNER_TEMP/report.md"
+          cat "$RUNNER_TEMP/report.md" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Update the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BLOCKING: ${{ steps.count.outputs.blocking }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          existing=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [ "$BLOCKING" -gt 0 ]; then
+            { echo "The scheduled scan of main found findings to fix. Details are in the run's summary: $RUN_URL"; echo; cat "$RUNNER_TEMP/report.md"; } > "$RUNNER_TEMP/body.md"
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --body-file "$RUNNER_TEMP/body.md"
+            else
+              gh issue create --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/body.md"
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "The scheduled scan found no critical, high or medium findings. $RUN_URL"
+          fi

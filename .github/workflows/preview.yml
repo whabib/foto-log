@@ -77,14 +77,23 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v3
 
+      # The Dockerfile builds on Docker Hardened Images, which need a Docker Hub sign-in to pull.
+      - name: Sign in to dhi.io
+        if: inputs.action == 'deploy'
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
+        run: echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+
       - name: Build and push image
         if: inputs.action == 'deploy'
         env:
           SHA: ${{ steps.pr.outputs.sha }}
         run: |
           gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-          docker build -t "$IMAGE:$SHA" .
-          docker push "$IMAGE:$SHA"
+          # buildx's container builder, so the image carries an SBOM and provenance attestation.
+          docker buildx create --use --driver docker-container
+          docker buildx build --pull --provenance=mode=max --sbom=true --push -t "$IMAGE:$SHA" .
 
       - name: Deploy with no traffic
         if: inputs.action == 'deploy'
