@@ -7,7 +7,7 @@ import { getGroup, memberCount } from "@/lib/groups-server";
 import { resolveActor } from "@/lib/identity";
 import DeleteAccountForm from "./DeleteAccountForm";
 
-export const metadata: Metadata = { title: "Delete Account · Settings · foto-log" };
+export const metadata: Metadata = { title: "Delete Account · Settings · Fotolog" };
 
 /** Settings' Delete Account page: what a delete removes and keeps, and the form to do it. */
 export default async function DeleteAccountPage() {
@@ -25,10 +25,10 @@ export default async function DeleteAccountPage() {
     <section className="settings-section delete-account" aria-labelledby="delete-heading">
       <h2 id="delete-heading">Delete Account</h2>
       {builtIn ? (
-        <p>This account runs foto-log and can&apos;t be deleted.</p>
+        <p>This account runs Fotolog and can&apos;t be deleted.</p>
       ) : (
         <>
-          <p>Deleting your foto-log removes it from foto-log right away:</p>
+          <p>Deleting your Fotolog removes it from Fotolog right away:</p>
           <ul>
             <li>your pages, Fotolog name, page settings and location</li>
             {group && (
@@ -38,13 +38,13 @@ export default async function DeleteAccountPage() {
               </li>
             )}
             <li>your group memberships</li>
-            <li>you&apos;re signed out of foto-log everywhere</li>
+            <li>you&apos;re signed out of Fotolog everywhere</li>
           </ul>
           <p>
             Metadata about your photos, your Friends/Favorites list, and images related to your page customization
             (like your Title Image and Wallpaper) are kept in your Bluesky repository. If you check the box below,
             we will remove that data as well. Removing this information will not change your Bluesky account. If you
-            uncheck the box, then we will leave that information there and if you come back to foto-log, we will 
+            uncheck the box, then we will leave that information there and if you come back to Fotolog, we will 
             be able to recreate your account with your photo history intact.
           </p>
           <p className="muted">

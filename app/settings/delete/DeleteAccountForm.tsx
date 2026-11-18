@@ -39,7 +39,7 @@ export default function DeleteAccountForm({ handle, did }: { handle: string | nu
           </p>
         )}
         <button type="submit" className="danger-button" disabled={!ready || pending}>
-          {pending ? "Deleting…" : "Delete my foto-log"}
+          {pending ? "Deleting…" : "Delete my Fotolog"}
         </button>
       </fieldset>
     </form>

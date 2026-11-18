@@ -25,7 +25,7 @@ export async function deleteAccountAction(_prev: DeleteState, form: FormData): P
   }
   const deleteRecords = form.get("deleteRecords") === "on";
   try {
-    if (await isBuiltInAdminStrict(user.did)) throw new DeleteAccountError("This account runs foto-log and can't be deleted.");
+    if (await isBuiltInAdminStrict(user.did)) throw new DeleteAccountError("This account runs Fotolog and can't be deleted.");
     if (deleteRecords) {
       // Before anything else, so a failure here leaves the foto-log as it was to try again.
       const agent = await agentFor(user.did);
