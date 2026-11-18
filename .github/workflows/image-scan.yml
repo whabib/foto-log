@@ -61,8 +61,15 @@ jobs:
           SCAN_REPORT: ${{ runner.temp }}/scan.md
         run: scripts/image-scan.sh "${{ steps.build.outputs.image }}" --wait
 
+      # The script reports an unfinished scan without failing (right for deploys);
+      # here, a week without a scan should show as a failed run.
+      - name: Require a finished scan
+        if: steps.scan.outputs.blocking == ''
+        run: |
+          echo "::error::The image scan didn't finish, so there are no results this week."
+          exit 1
+
       - name: Update the tracking issue
-        if: steps.scan.outputs.blocking != ''
         env:
           GH_TOKEN: ${{ github.token }}
           SCAN_REPORT: ${{ runner.temp }}/scan.md
