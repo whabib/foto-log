@@ -16,7 +16,7 @@ export default function DeleteAccountForm({ handle, did }: { handle: string | nu
       <fieldset className="settings-fields" disabled={pending}>
         <label className="check-row">
           <input type="checkbox" name="deleteRecords" defaultChecked />
-          Also delete my photos and friends from my Bluesky repository
+          Also delete my Fotolog-specific information from my Bluesky repository
         </label>
         <div className="field">
           <label htmlFor="confirm">
