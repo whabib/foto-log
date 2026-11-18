@@ -567,6 +567,32 @@ a {
   overflow-wrap: anywhere;
 }
 
+/* The Member Directory: its sort choice, and each member's avatar beside their name. */
+.directory-sort {
+  margin-top: 12px;
+  font-size: 0.875rem;
+}
+
+.member-entry-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.member-entry-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.group-entry .friend-toggle {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+}
+
 .group-entry .group-box {
   margin: 8px 0 0;
 }
@@ -868,6 +894,11 @@ body:has(.member-theme) .account-menu li button:hover {
   margin: 0 0 20px;
   font-size: 0.875rem;
   opacity: 0.8;
+}
+
+/* A few lines below the link above it. */
+.rail-more-spaced {
+  margin-top: 40px;
 }
 
 .recent-photos {

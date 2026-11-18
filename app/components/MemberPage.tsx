@@ -161,6 +161,9 @@ export default function MemberPage(props: MemberPageProps) {
             <p className="rail-more">
               » <Link href={photoCalendarPath(owner)}>View all photos</Link>
             </p>
+            <p className="rail-more rail-more-spaced">
+              » <Link href="/members">View Member Directory</Link>
+            </p>
           </aside>
 
           <aside className="member-right">
