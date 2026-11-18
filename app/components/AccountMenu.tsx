@@ -69,6 +69,9 @@ export default function AccountMenu({
           <Link href="/post">Upload a photo</Link>
         </li>
         <li>
+          <Link href="/members">Member Directory</Link>
+        </li>
+        <li>
           <Link href="/settings">Settings</Link>
         </li>
         {isGroup && (
