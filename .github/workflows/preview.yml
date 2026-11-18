@@ -108,14 +108,6 @@ jobs:
             --quiet
           echo "Deployed PR #${{ inputs.pr }} ($SHA) as tag $TAG with no traffic." >> "$GITHUB_STEP_SUMMARY"
 
-      # A report only: a finding never holds back a preview.
-      - name: Vulnerability scan
-        if: inputs.action == 'deploy'
-        continue-on-error: true
-        env:
-          SHA: ${{ steps.pr.outputs.sha }}
-        run: scripts/image-scan.sh "$IMAGE:$SHA" --wait
-
       - name: Send all traffic to the PR revision
         if: inputs.action == 'promote'
         run: |

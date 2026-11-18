@@ -65,7 +65,3 @@ jobs:
             --to-latest \
             --quiet
 
-      # A report only: a finding never holds back a deploy.
-      - name: Vulnerability scan
-        continue-on-error: true
-        run: scripts/image-scan.sh "$IMAGE:${{ github.sha }}" --wait

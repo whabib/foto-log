@@ -1,15 +1,19 @@
-name: Weekly image scan
+name: Image scan
 
-# Builds main every week on the latest Docker Hardened Images base, pushes
-# it (without deploying) so Artifact Registry scans it, and keeps one issue
-# up to date: opened or updated while there are critical, high or medium
-# findings, closed once there are none. A fresh build each week also shows
-# whether simply redeploying would clear findings that the base has fixed.
+# Twice a week (and on demand from the Actions tab), builds main on the
+# latest Docker Hardened Images base, pushes it without deploying, and scans
+# it with Docker Scout. Scout reads the hardened base's VEX statements, so
+# CVEs Docker has shown don't affect the image aren't reported. (Artifact
+# Registry's own scanner can't read these images: they have no os-release.)
+# Keeps one issue up to date: opened or commented on while there are
+# critical, high or medium findings, closed once there are none.
 
 on:
   schedule:
-    - cron: "17 14 * * 1" # Mondays, 14:17 UTC
+    - cron: "17 14 * * 1,4" # Mondays and Thursdays, 14:17 UTC
   workflow_dispatch:
+  push:
+    branches: [hardened-images] # TEMPORARY: to try the scan before merging
 
 concurrency:
   group: image-scan
@@ -30,60 +34,81 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: main
 
       - uses: google-github-actions/auth@v3
+        id: gcp
         with:
           workload_identity_provider: projects/367642066122/locations/global/workloadIdentityPools/github/providers/github
           service_account: github-deployer@foto-log-app.iam.gserviceaccount.com
+          token_format: access_token
 
       - uses: google-github-actions/setup-gcloud@v3
 
-      - name: Sign in to dhi.io
+      # The same Docker Hub account pulls the hardened images (dhi.io) and runs Scout (docker.io).
+      - name: Sign in to dhi.io and Docker Hub
         env:
           DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
           DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
-        run: echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+        run: |
+          echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+          echo "$DHI_TOKEN" | docker login --username "$DHI_USERNAME" --password-stdin
 
+      # Provenance and an SBOM let Scout tell the hardened base from our own layers,
+      # and apply the base's VEX statements. The default builder can't attach them.
       - name: Build and push image
         id: build
         run: |
           gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker buildx create --use --driver docker-container
           tag="scan-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
-          docker build --pull -t "$IMAGE:$tag" .
-          docker push "$IMAGE:$tag"
+          docker buildx build --pull --provenance=mode=max --sbom=true --push -t "$IMAGE:$tag" .
           echo "image=$IMAGE:$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Vulnerability scan
-        id: scan
-        env:
-          SCAN_REPORT: ${{ runner.temp }}/scan.md
-        run: scripts/image-scan.sh "${{ steps.build.outputs.image }}" --wait
+      - name: Scan with Docker Scout
+        uses: docker/scout-action@5dae9c7571dd0f3de81f5b501240c593c13c3eb6 # v1.9.3
+        with:
+          command: cves
+          image: registry://${{ steps.build.outputs.image }}
+          platform: linux/amd64
+          only-severities: critical,high,medium
+          sarif-file: ${{ runner.temp }}/scout.sarif
+          summary: true
+          write-comment: false
+          registry-user: oauth2accesstoken
+          registry-password: ${{ steps.gcp.outputs.access_token }}
 
-      # The script reports an unfinished scan without failing (right for deploys);
-      # here, a week without a scan should show as a failed run.
-      - name: Require a finished scan
-        if: steps.scan.outputs.blocking == ''
+      - name: Count findings
+        id: count
+        env:
+          SARIF: ${{ runner.temp }}/scout.sarif
         run: |
-          echo "::error::The image scan didn't finish, so there are no results this week."
-          exit 1
+          if [ ! -s "$SARIF" ]; then
+            echo "::error::Docker Scout wrote no results, so there are none this week."
+            exit 1
+          fi
+          blocking=$(jq '[.runs[].results[].ruleId] | unique | length' "$SARIF")
+          echo "blocking=$blocking" >> "$GITHUB_OUTPUT"
+          {
+            echo "Critical, high and medium CVEs in \`${{ steps.build.outputs.image }}\`: $blocking"
+            echo
+            jq -r '[.runs[].results[] | "- \(.ruleId): \(.message.text | split("\n")[0])"] | unique | .[]' "$SARIF"
+          } > "$RUNNER_TEMP/report.md"
+          cat "$RUNNER_TEMP/report.md"
 
       - name: Update the tracking issue
         env:
           GH_TOKEN: ${{ github.token }}
-          SCAN_REPORT: ${{ runner.temp }}/scan.md
-          BLOCKING: ${{ steps.scan.outputs.blocking }}
+          BLOCKING: ${{ steps.count.outputs.blocking }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           existing=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')
           if [ "$BLOCKING" -gt 0 ]; then
-            { echo "The weekly scan of main found findings to fix."; echo; cat "$SCAN_REPORT"; echo; echo "Run: $RUN_URL"; } > "$RUNNER_TEMP/body.md"
+            { echo "The scheduled scan of main found findings to fix. Details are in the run's summary: $RUN_URL"; echo; cat "$RUNNER_TEMP/report.md"; } > "$RUNNER_TEMP/body.md"
             if [ -n "$existing" ]; then
               gh issue comment "$existing" --body-file "$RUNNER_TEMP/body.md"
             else
               gh issue create --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/body.md"
             fi
           elif [ -n "$existing" ]; then
-            gh issue close "$existing" --comment "The weekly scan found no critical, high or medium findings. $RUN_URL"
+            gh issue close "$existing" --comment "The scheduled scan found no critical, high or medium findings. $RUN_URL"
           fi
