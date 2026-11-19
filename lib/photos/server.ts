@@ -433,21 +433,20 @@ export async function fetchPhoto(actor: Actor, rkey: string): Promise<StoredPhot
 
 /**
  * Deletes `user`'s photo `rkey` and the Bluesky post that shares it, in one
- * atomic write.
+ * atomic write. The record isn't validated: its owner can delete it whatever
+ * it holds, and only its post link is read.
  */
 export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void> {
   const agent = await agentFor(user.did);
-  let record: PhotoRecord;
+  let postUri: unknown;
   try {
+    // The agent hands back the record already decoded, so it's read as is.
     const { data } = await agent.com.atproto.repo.getRecord({
       repo: user.did,
       collection: PHOTO_COLLECTION,
       rkey,
     });
-    const { jsonToLex } = await import("@atproto/lexicon");
-    const value = jsonToLex(data.value);
-    assertValidPhotoRecord(rkey, value);
-    record = value;
+    postUri = (data.value as { post?: { uri?: unknown } } | null)?.post?.uri;
   } catch (err) {
     if (errorName(err) === "RecordNotFound") {
       throw new PhotoError("not_found", "That photo doesn't exist anymore.");
@@ -459,7 +458,8 @@ export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void
   const writes: { $type: typeof DELETE; collection: string; rkey: string }[] = [
     { $type: DELETE, collection: PHOTO_COLLECTION, rkey },
   ];
-  const postMatch = /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(record.post.uri);
+  const postMatch =
+    typeof postUri === "string" ? /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(postUri) : null;
   if (
     postMatch &&
     postMatch[1] === user.did &&
