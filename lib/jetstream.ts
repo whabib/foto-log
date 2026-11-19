@@ -1,11 +1,17 @@
 import { PHOTO_COLLECTION } from "@/lib/photo-record";
 
-/** Bluesky's public Jetstream, filtered to foto-log photos. Override with JETSTREAM_URL. */
+const POST_COLLECTION = "app.bsky.feed.post";
+
+/**
+ * Bluesky's public Jetstream, filtered to foto-log photos and Bluesky posts
+ * (for members' post deletes). Override with JETSTREAM_URL.
+ */
 export const DEFAULT_JETSTREAM_URL = "wss://jetstream2.us-east.bsky.network/subscribe";
 
 export function jetstreamUrl(base: string, cursorUs: number | null): string {
   const url = new URL(base);
   url.searchParams.set("wantedCollections", PHOTO_COLLECTION);
+  url.searchParams.append("wantedCollections", POST_COLLECTION);
   if (cursorUs !== null) url.searchParams.set("cursor", String(cursorUs));
   return url.toString();
 }
@@ -51,28 +57,6 @@ export function photoChange(event: unknown): PhotoChange | null {
 export function identityChange(event: unknown): string | null {
   const e = event as JetstreamEvent | null;
   return e?.kind === "identity" && typeof e.did === "string" ? e.did : null;
-}
-
-const POST_COLLECTION = "app.bsky.feed.post";
-
-/**
- * Jetstream for Bluesky post deletes, from the cursor. It waits for
- * `postOptions` before sending anything, which narrows it to members' repos.
- */
-export function postJetstreamUrl(base: string, cursorUs: number | null): string {
-  const url = new URL(base);
-  url.searchParams.set("wantedCollections", POST_COLLECTION);
-  url.searchParams.set("requireHello", "true");
-  if (cursorUs !== null) url.searchParams.set("cursor", String(cursorUs));
-  return url.toString();
-}
-
-/** The message that starts a postJetstreamUrl stream, limited to `dids`' posts. */
-export function postOptions(dids: string[]): string {
-  return JSON.stringify({
-    type: "options_update",
-    payload: { wantedCollections: [POST_COLLECTION], wantedDids: dids, maxMessageSizeBytes: 0 },
-  });
 }
 
 /** The deleted Bluesky post in a Jetstream event, or null for anything else. */

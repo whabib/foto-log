@@ -94,6 +94,21 @@ export const photoIndex = pgTable(
   ],
 );
 
+/**
+ * Bluesky posts members deleted, seen on Jetstream. A photo that shared one
+ * is deleted (or, without the member's sign-in, kept out of the index),
+ * whichever arrives first: the post delete or the photo.
+ */
+export const deletedPost = pgTable(
+  "deleted_post",
+  {
+    did: text("did").notNull(),
+    rkey: text("rkey").notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.did, t.rkey] })],
+);
+
 /** Small bits of server state, such as the Jetstream cursor. */
 export const appState = pgTable("app_state", {
   key: text("key").primaryKey(),

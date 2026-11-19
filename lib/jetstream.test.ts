@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { eventTimeUs, identityChange, jetstreamUrl, photoChange, postDelete, postJetstreamUrl, postOptions } from "./jetstream";
+import { eventTimeUs, identityChange, jetstreamUrl, photoChange, postDelete } from "./jetstream";
 
 const did = "did:plc:abcdefghijklmnopqrstuvwx";
 
 describe("jetstreamUrl", () => {
-  it("asks for photos only, from the cursor", () => {
+  it("asks for photos and posts, from the cursor", () => {
     const url = new URL(jetstreamUrl("wss://js.example/subscribe", 1700000000000000));
-    expect(url.searchParams.get("wantedCollections")).toBe("com.foto-log.photo");
+    expect(url.searchParams.getAll("wantedCollections")).toEqual(["com.foto-log.photo", "app.bsky.feed.post"]);
     expect(url.searchParams.get("cursor")).toBe("1700000000000000");
     expect(new URL(jetstreamUrl("wss://js.example/subscribe", null)).searchParams.has("cursor")).toBe(false);
   });
@@ -60,17 +60,6 @@ describe("identityChange", () => {
 });
 
 describe("post deletes", () => {
-  it("asks for posts, waiting for the member list", () => {
-    const url = new URL(postJetstreamUrl("wss://js.example/subscribe", 1700000000000000));
-    expect(url.searchParams.get("wantedCollections")).toBe("app.bsky.feed.post");
-    expect(url.searchParams.get("requireHello")).toBe("true");
-    expect(url.searchParams.get("cursor")).toBe("1700000000000000");
-    expect(JSON.parse(postOptions([did]))).toEqual({
-      type: "options_update",
-      payload: { wantedCollections: ["app.bsky.feed.post"], wantedDids: [did], maxMessageSizeBytes: 0 },
-    });
-  });
-
   it("reads only post deletes", () => {
     const event = (operation: string, collection = "app.bsky.feed.post") => ({
       did,
