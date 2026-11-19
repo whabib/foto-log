@@ -1,5 +1,6 @@
 import "server-only";
 import { Agent } from "@atproto/api";
+import { isValidRecordKey } from "@atproto/syntax";
 import type { CurrentUser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { resolveActor, type Actor } from "@/lib/identity";
@@ -463,6 +464,7 @@ export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void
   if (
     postMatch &&
     postMatch[1] === user.did &&
+    isValidRecordKey(postMatch[2]) &&
     (await recordExists(agent, user.did, POST_COLLECTION, postMatch[2]))
   ) {
     writes.push({
