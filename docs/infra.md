@@ -53,7 +53,7 @@ All were generated directly into Secret Manager and never written to disk. Only 
 
 ## Photo index (Cloud Scheduler)
 
-The home page lists photos from the `photo_index` table. foto-log writes its own posts and deletes to it directly. Everything else arrives from Bluesky's Jetstream: every 5 minutes, Cloud Scheduler job `foto-log-index-tick` POSTs to `https://foto-log.com/api/index-tick` with `Authorization: Bearer <INDEX_TICK_SECRET>`. Each run reads Jetstream from the cursor saved in `app_state` until it catches up (at most 45 seconds), then copies the photos of up to 5 members who haven't been backfilled yet. Overlapping runs skip. An always-on worker is #45.
+The home page lists photos from the `photo_index` table. foto-log writes its own posts and deletes to it directly. Everything else arrives from Bluesky's Jetstream: every 5 minutes, Cloud Scheduler job `foto-log-index-tick` POSTs to `https://foto-log.com/api/index-tick` with `Authorization: Bearer <INDEX_TICK_SECRET>`. Each run reads Jetstream from the cursor saved in `app_state` until it catches up (at most 45 seconds). Alongside it, a second Jetstream stream limited to members' repos reads their Bluesky post deletes from its own cursor (`jetstream_post_cursor`); a deleted post deletes the photo it shared, using the member's stored sign-in. Then each run copies the photos of up to 5 members who haven't been backfilled yet. Overlapping runs skip. An always-on worker is #45.
 
 Cost: Cloud Scheduler's first 3 jobs per billing account are free, and the Cloud Run time is a few seconds every 5 minutes.
 

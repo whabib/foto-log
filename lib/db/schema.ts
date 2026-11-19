@@ -83,9 +83,12 @@ export const photoIndex = pgTable(
     uploadDate: text("upload_date").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The rkey of the photo's Bluesky post in the same repo, so deleting the post can delete the photo. */
+    postRkey: text("post_rkey"),
   },
   (t) => [
     primaryKey({ columns: [t.did, t.rkey] }),
+    index("photo_index_did_post_rkey_idx").on(t.did, t.postRkey),
     index("photo_index_created_at_idx").on(t.createdAt),
     index("photo_index_did_created_at_idx").on(t.did, t.createdAt),
   ],

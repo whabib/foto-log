@@ -479,6 +479,24 @@ export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void
 }
 
 /**
+ * Deletes `did`'s photo `rkey` after its Bluesky post was deleted, so the
+ * photo goes with it. Uses the member's stored sign-in; if that's gone, the
+ * photo only leaves the index, and the record stays in their repo.
+ */
+export async function deletePhotoAfterPost(did: string, rkey: string): Promise<void> {
+  try {
+    const agent = await agentFor(did);
+    await agent.com.atproto.repo.deleteRecord({ repo: did, collection: PHOTO_COLLECTION, rkey });
+  } catch (err) {
+    console.warn("Couldn't delete a photo whose Bluesky post was deleted; hiding it", { did, rkey, err });
+  }
+  await updateIndex((index) => index.unindexPhoto(did, rkey));
+  await forgetGroupPost(did, rkey).catch((err) =>
+    console.warn("Couldn't forget a deleted group post", { did, rkey, err }),
+  );
+}
+
+/**
  * Applies a change to the photo index. The index catches up from Jetstream
  * anyway, so a failure here only delays the change; it never fails the
  * write. Imported lazily: the index module imports this one.

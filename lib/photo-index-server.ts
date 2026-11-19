@@ -3,11 +3,21 @@ import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { getDb, withTryLock } from "@/lib/db";
 import { appState, bannedMember, member, photoIndex } from "@/lib/db/schema";
 import { resolveActor } from "@/lib/identity";
-import { DEFAULT_JETSTREAM_URL, eventTimeUs, identityChange, jetstreamUrl, photoChange } from "@/lib/jetstream";
+import {
+  DEFAULT_JETSTREAM_URL,
+  eventTimeUs,
+  identityChange,
+  jetstreamUrl,
+  photoChange,
+  postDelete,
+  postJetstreamUrl,
+  postOptions,
+} from "@/lib/jetstream";
 import { assertValidPhotoRecord, type PhotoRecord } from "@/lib/photo-record";
-import { scanPhotos } from "@/lib/photos/server";
+import { deletePhotoAfterPost, scanPhotos } from "@/lib/photos/server";
 
 const CURSOR_KEY = "jetstream_cursor";
+const POST_CURSOR_KEY = "jetstream_post_cursor";
 
 /**
  * Adds or replaces one photo in the index, if `did` is a member. A member
@@ -21,14 +31,22 @@ export async function indexPhoto(did: string, rkey: string, cid: string, record:
   const alt = record.alt ?? null;
   const caption = record.caption ?? null;
   const createdAt = new Date(record.createdAt);
+  const postRkey = postRkeyIn(did, record);
   // indexed_at is the database's clock, which backfill reconciliation compares against.
   await db.execute(sql`
-    INSERT INTO ${photoIndex} (did, rkey, cid, image_cid, alt, caption, upload_date, created_at, indexed_at)
-    SELECT ${did}, ${rkey}, ${cid}, ${imageCid}, ${alt}, ${caption}, ${record.uploadDate}, ${createdAt}, now()
+    INSERT INTO ${photoIndex} (did, rkey, cid, image_cid, alt, caption, upload_date, created_at, indexed_at, post_rkey)
+    SELECT ${did}, ${rkey}, ${cid}, ${imageCid}, ${alt}, ${caption}, ${record.uploadDate}, ${createdAt}, now(), ${postRkey}
     WHERE EXISTS (SELECT 1 FROM ${member} WHERE ${member.did} = ${did} FOR SHARE)
     ON CONFLICT (did, rkey) DO UPDATE SET
       cid = excluded.cid, image_cid = excluded.image_cid, alt = excluded.alt, caption = excluded.caption,
-      upload_date = excluded.upload_date, created_at = excluded.created_at, indexed_at = excluded.indexed_at`);
+      upload_date = excluded.upload_date, created_at = excluded.created_at, indexed_at = excluded.indexed_at,
+      post_rkey = excluded.post_rkey`);
+}
+
+/** The rkey of the photo's Bluesky post, when it's in the photo's own repo. */
+export function postRkeyIn(did: string, record: PhotoRecord): string | null {
+  const match = /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(record.post.uri);
+  return match && match[1] === did ? match[2] : null;
 }
 
 /** Removes one photo from the index. */
@@ -207,19 +225,19 @@ const IDLE_MS = 10_000;
 /** How far back the first catch-up starts; older photos come from backfills. */
 const FIRST_CURSOR_LOOKBACK_US = 60 * 60 * 1_000_000;
 
-async function readCursor(): Promise<number | null> {
+async function readCursor(key = CURSOR_KEY): Promise<number | null> {
   const db = await getDb();
-  const [row] = await db.select().from(appState).where(eq(appState.key, CURSOR_KEY)).limit(1);
+  const [row] = await db.select().from(appState).where(eq(appState.key, key)).limit(1);
   const n = row ? Number(row.value) : NaN;
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
-async function writeCursor(us: number): Promise<void> {
+async function writeCursor(us: number, key = CURSOR_KEY): Promise<void> {
   const db = await getDb();
   const value = String(us);
   await db
     .insert(appState)
-    .values({ key: CURSOR_KEY, value })
+    .values({ key, value })
     .onConflictDoUpdate({ target: appState.key, set: { value, updatedAt: new Date() } });
 }
 
@@ -300,6 +318,97 @@ async function catchUp(): Promise<CatchUpResult> {
   return { events, changes, cursor, stoppedBy };
 }
 
+/**
+ * The post-delete stream only carries members' posts, so it can go quiet
+ * while replay is still running. Quiet this long after connecting counts as
+ * caught up.
+ */
+const POST_IDLE_MS = 15_000;
+/** Replayed again on the next run after a quiet stop, in case replay was slow. Deletes are idempotent. */
+const POST_REPLAY_MARGIN_US = 2 * 60 * 1_000_000;
+
+/**
+ * Reads members' Bluesky post deletes from Jetstream since the saved cursor,
+ * and deletes the photo each deleted post shared. Saves the new cursor.
+ */
+async function catchUpPostDeletes(): Promise<CatchUpResult> {
+  const startUs = Date.now() * 1000;
+  const saved = await readCursor(POST_CURSOR_KEY);
+  let cursor = saved ?? startUs - FIRST_CURSOR_LOOKBACK_US;
+  const db = await getDb();
+  const members = (await db.select({ did: member.did }).from(member)).map((m) => m.did);
+  if (members.length === 0) {
+    await writeCursor(startUs, POST_CURSOR_KEY);
+    return { events: 0, changes: 0, cursor: startUs, stoppedBy: "caught-up" };
+  }
+  const ws = new WebSocket(postJetstreamUrl(process.env.JETSTREAM_URL ?? DEFAULT_JETSTREAM_URL, cursor));
+  let events = 0;
+  let changes = 0;
+  let queue = Promise.resolve();
+  let failed: { err: unknown } | undefined;
+
+  const stoppedBy = await new Promise<CatchUpResult["stoppedBy"]>((resolve) => {
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const finish = (why: CatchUpResult["stoppedBy"]) => {
+      clearTimeout(idle);
+      clearTimeout(deadline);
+      ws.close();
+      resolve(why);
+    };
+    const deadline = setTimeout(() => finish("time"), CATCH_UP_MS);
+    const touch = () => {
+      clearTimeout(idle);
+      idle = setTimeout(() => finish("quiet"), POST_IDLE_MS);
+    };
+    ws.addEventListener("open", () => {
+      ws.send(postOptions(members));
+      touch();
+    });
+    ws.addEventListener("error", () => finish("error"));
+    ws.addEventListener("close", () => finish("error"));
+    ws.addEventListener("message", (msg) => {
+      touch();
+      let event: unknown;
+      try {
+        event = JSON.parse(String(msg.data));
+      } catch {
+        return;
+      }
+      events++;
+      const t = eventTimeUs(event);
+      const deleted = postDelete(event);
+      queue = queue
+        .then(async () => {
+          if (failed) return;
+          if (deleted) {
+            const photos = await db
+              .select({ rkey: photoIndex.rkey })
+              .from(photoIndex)
+              .where(and(eq(photoIndex.did, deleted.did), eq(photoIndex.postRkey, deleted.rkey)));
+            for (const { rkey } of photos) {
+              changes++;
+              await deletePhotoAfterPost(deleted.did, rkey);
+            }
+          }
+          if (t !== null && t > cursor) cursor = t;
+        })
+        .catch((err: unknown) => {
+          failed ??= { err };
+          finish("error");
+        });
+      if (t !== null && t >= startUs) finish("caught-up");
+    });
+  });
+
+  await queue;
+  // Quiet means no member deleted a post since the cursor, so it moves up to
+  // shortly before this run started.
+  if (stoppedBy === "quiet" && !failed) cursor = Math.max(cursor, startUs - POST_REPLAY_MARGIN_US);
+  await writeCursor(cursor, POST_CURSOR_KEY);
+  if (failed) throw failed.err;
+  return { events, changes, cursor, stoppedBy };
+}
+
 /** Members whose photos haven't been copied into the index yet, a few per tick. */
 const BACKFILLS_PER_TICK = 5;
 
@@ -320,13 +429,27 @@ async function backfillPending(): Promise<number> {
 }
 
 /**
- * One run of the indexer: Jetstream catch-up, then a few pending member
- * backfills. Returns null if another instance is already running it.
+ * One run of the indexer: Jetstream catch-up and members' Bluesky post
+ * deletes, then a few pending member backfills. Returns null if another
+ * instance is already running it.
  */
-export async function indexTick(): Promise<{ catchUp: CatchUpResult; backfilled: number } | null> {
+export async function indexTick(): Promise<{
+  catchUp: CatchUpResult;
+  postDeletes: CatchUpResult | { error: true };
+  backfilled: number;
+} | null> {
   return withTryLock("photo-index-tick", async () => {
-    const result = await catchUp();
+    // Side by side, so the run stays within Cloud Scheduler's deadline. The
+    // post deletes have their own stream and cursor, so their failure doesn't
+    // hold up the index.
+    const [result, postDeletes] = await Promise.all([
+      catchUp(),
+      catchUpPostDeletes().catch((err: unknown) => {
+        console.error("Catching up on Bluesky post deletes failed", err);
+        return { error: true as const };
+      }),
+    ]);
     const backfilled = await backfillPending();
-    return { catchUp: result, backfilled };
+    return { catchUp: result, postDeletes, backfilled };
   });
 }
