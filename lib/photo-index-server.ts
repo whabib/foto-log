@@ -1,4 +1,5 @@
 import "server-only";
+import { isValidRecordKey } from "@atproto/syntax";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { getDb, withTryLock } from "@/lib/db";
 import { appState, bannedMember, member, photoIndex } from "@/lib/db/schema";
@@ -46,7 +47,7 @@ export async function indexPhoto(did: string, rkey: string, cid: string, record:
 /** The rkey of the photo's Bluesky post, when it's in the photo's own repo. */
 export function postRkeyIn(did: string, record: PhotoRecord): string | null {
   const match = /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(record.post.uri);
-  return match && match[1] === did ? match[2] : null;
+  return match && match[1] === did && isValidRecordKey(match[2]) ? match[2] : null;
 }
 
 /** Removes one photo from the index. */
