@@ -53,9 +53,9 @@ All were generated directly into Secret Manager and never written to disk. Only 
 
 ## Photo index (Cloud Scheduler)
 
-The home page lists photos from the `photo_index` table. foto-log writes its own posts and deletes to it directly. Everything else arrives from Bluesky's Jetstream: every 5 minutes, Cloud Scheduler job `foto-log-index-tick` POSTs to `https://foto-log.com/api/index-tick` with `Authorization: Bearer <INDEX_TICK_SECRET>`. Each run reads Jetstream from the cursor saved in `app_state` until it catches up (at most 45 seconds). The stream also carries Bluesky posts, so members' post deletes are recorded in `deleted_post`; each run then deletes the photos that shared those posts, using the member's stored sign-in (without it, the photo is only kept out of the index). Then each run copies the photos of up to 5 members who haven't been backfilled yet. Overlapping runs skip. An always-on worker is #45.
+The home page lists photos from the `photo_index` table. foto-log writes its own posts and deletes to it directly. Everything else arrives from Bluesky's Jetstream: every 3 minutes, Cloud Scheduler job `foto-log-index-tick` POSTs to `https://foto-log.com/api/index-tick` with `Authorization: Bearer <INDEX_TICK_SECRET>`. Each run reads Jetstream from the cursor saved in `app_state` until it catches up (at most 45 seconds). The stream also carries Bluesky posts, so members' post deletes are recorded in `deleted_post`; each run then deletes the photos that shared those posts, using the member's stored sign-in (without it, the photo is only kept out of the index). Then each run copies the photos of up to 5 members who haven't been backfilled yet. Overlapping runs skip. An always-on worker is #45.
 
-Cost: Cloud Scheduler's first 3 jobs per billing account are free, and the Cloud Run time is a few seconds every 5 minutes.
+Cost: Cloud Scheduler's first 3 jobs per billing account are free, and the Cloud Run time is a few seconds every 3 minutes.
 
 Set up once, after the PR that adds the endpoint is merged and deployed (so the service update below builds on the `main` revision):
 
@@ -70,7 +70,7 @@ gcloud run services update foto-log-web --project=foto-log-app --region=us-centr
 # The job.
 gcloud services enable cloudscheduler.googleapis.com --project=foto-log-app
 gcloud scheduler jobs create http foto-log-index-tick --project=foto-log-app --location=us-central1 \
-  --schedule="*/5 * * * *" --uri=https://foto-log.com/api/index-tick --http-method=POST \
+  --schedule="*/3 * * * *" --uri=https://foto-log.com/api/index-tick --http-method=POST \
   --attempt-deadline=120s \
   --headers="Authorization=Bearer $(gcloud secrets versions access latest --secret=index-tick-secret --project=foto-log-app)"
 ```
