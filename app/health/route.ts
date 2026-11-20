@@ -11,7 +11,8 @@ export async function GET() {
       "SELECT count(*) AS migrations FROM drizzle.__drizzle_migrations",
     );
     return Response.json(
-      { ok: true, migrations: Number(rows[0].migrations) },
+      // The Cloud Run revision answering, so a deploy can tell the new revision is serving.
+      { ok: true, migrations: Number(rows[0].migrations), revision: process.env.K_REVISION ?? null },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {

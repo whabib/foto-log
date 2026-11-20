@@ -253,12 +253,14 @@ export type CatchUpResult = {
 };
 
 /**
- * How far back a fallback instance starts. Each Jetstream instance stamps
- * events with its own clock, so the same cursor can land a little apart on
- * two of them. Replaying a few seconds twice is harmless: every change is
+ * How far before the saved cursor each read starts. Each Jetstream instance
+ * stamps events with its own clock, and the saved cursor may come from a
+ * different instance than the one read now (a fallback last run, the
+ * primary this run), so the same moment can land a little apart on two of
+ * them. Replaying a few seconds twice is harmless: every change is
  * idempotent and applied in order.
  */
-const FALLBACK_REWIND_US = 10 * 1_000_000;
+const CURSOR_REWIND_US = 10 * 1_000_000;
 
 /**
  * Reads foto-log photo changes from Jetstream since the saved cursor and
@@ -298,6 +300,8 @@ async function catchUp(): Promise<CatchUpResult> {
         clearTimeout(idle);
         idle = setTimeout(() => finish("quiet"), IDLE_MS);
       };
+      // Armed before the handshake too, so an instance that never answers leaves time for the next.
+      touch();
       ws.addEventListener("open", touch);
       ws.addEventListener("error", () => finish("error"));
       ws.addEventListener("close", () => finish("error"));
@@ -343,11 +347,11 @@ async function catchUp(): Promise<CatchUpResult> {
   const bases = jetstreamBases(process.env.JETSTREAM_URL);
   let stoppedBy: CatchUpResult["stoppedBy"] = "time";
   let host = "";
-  for (const [i, base] of bases.entries()) {
+  for (const base of bases) {
     const timeLeft = deadlineAt - Date.now();
     if (timeLeft <= 0) break;
     host = new URL(base).host;
-    const from = i === 0 ? cursor : Math.max(1, cursor - FALLBACK_REWIND_US);
+    const from = Math.max(1, cursor - CURSOR_REWIND_US);
     const outcome = await readFrom(base, from, timeLeft);
     await queue;
     stoppedBy = outcome.stoppedBy;
