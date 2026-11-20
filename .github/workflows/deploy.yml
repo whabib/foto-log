@@ -47,13 +47,29 @@ jobs:
           docker buildx create --use --driver docker-container
           docker buildx build --pull --provenance=mode=max --sbom=true --push -t "$IMAGE:${{ github.sha }}" .
 
+      # The revision serving main now, to roll back to if the new one is unhealthy.
+      - name: Note the current revision
+        id: previous
+        run: |
+          prev=$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json | jq -r '[.status.traffic[]? | select(.tag == "main") | .revisionName][0] // empty')
+          echo "Revision tagged main before this deploy: ${prev:-none}"
+          echo "revision=$prev" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Cloud Run
         run: |
+          # The startup probe holds a new revision back until /health answers,
+          # which also means it reached the database and ran migrations. A
+          # revision that never gets healthy fails the deploy and gets no traffic.
+          # It also runs on every cold start, so it polls often: up to 30 x 2s = 60s.
           gcloud run deploy "$SERVICE" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
             --image="$IMAGE:${{ github.sha }}" \
             --tag=main \
+            --startup-probe=httpGet.path=/health,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=2,failureThreshold=30 \
             --quiet
           # The "main" tag marks the revision deployed from main, so the
           # preview workflow's restore can find it. A --no-traffic deploy
@@ -66,3 +82,32 @@ jobs:
             --to-latest \
             --quiet
 
+      # Checks the site through the load balancer, as visitors reach it.
+      - name: Check foto-log.com is healthy
+        id: health
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if body=$(curl -fsS --max-time 10 -H "Cache-Control: no-cache" https://foto-log.com/health) \
+              && echo "$body" | jq -e '.ok == true' > /dev/null; then
+              echo "Healthy: $body"
+              exit 0
+            fi
+            echo "Attempt $attempt: not healthy yet"
+            sleep 10
+          done
+          echo "::error::foto-log.com/health didn't answer ok after the deploy."
+          exit 1
+
+      - name: Roll back to the previous revision
+        if: failure() && steps.health.outcome == 'failure' && steps.previous.outputs.revision != ''
+        env:
+          PREVIOUS: ${{ steps.previous.outputs.revision }}
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$PREVIOUS=100" \
+            --update-tags="main=$PREVIOUS" \
+            --quiet
+          echo "::error::Rolled back: foto-log.com is serving $PREVIOUS again."
+          echo "The new revision failed its health check, so foto-log.com was rolled back to \`$PREVIOUS\`." >> "$GITHUB_STEP_SUMMARY"
