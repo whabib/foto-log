@@ -12,7 +12,7 @@ function authorized(header: string | null): boolean {
 
 /**
  * Runs the photo indexer once: catches up from Jetstream and backfills a
- * few members. Called every 5 minutes by Cloud Scheduler with the
+ * few members. Called every 3 minutes by Cloud Scheduler with the
  * INDEX_TICK_SECRET bearer token (docs/infra.md).
  */
 export async function POST(request: Request) {

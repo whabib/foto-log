@@ -1,11 +1,19 @@
 import "server-only";
+import { isValidRecordKey } from "@atproto/syntax";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { getDb, withTryLock } from "@/lib/db";
-import { appState, bannedMember, member, photoIndex } from "@/lib/db/schema";
+import { appState, bannedMember, deletedPost, member, photoIndex } from "@/lib/db/schema";
 import { resolveActor } from "@/lib/identity";
-import { DEFAULT_JETSTREAM_URL, eventTimeUs, identityChange, jetstreamUrl, photoChange } from "@/lib/jetstream";
+import {
+  DEFAULT_JETSTREAM_URL,
+  eventTimeUs,
+  identityChange,
+  jetstreamUrl,
+  photoChange,
+  postDelete,
+} from "@/lib/jetstream";
 import { assertValidPhotoRecord, type PhotoRecord } from "@/lib/photo-record";
-import { scanPhotos } from "@/lib/photos/server";
+import { deletePhotoAfterPost, scanPhotos } from "@/lib/photos/server";
 
 const CURSOR_KEY = "jetstream_cursor";
 
@@ -21,14 +29,23 @@ export async function indexPhoto(did: string, rkey: string, cid: string, record:
   const alt = record.alt ?? null;
   const caption = record.caption ?? null;
   const createdAt = new Date(record.createdAt);
+  const postRkey = postRkeyIn(did, record);
   // indexed_at is the database's clock, which backfill reconciliation compares against.
   await db.execute(sql`
-    INSERT INTO ${photoIndex} (did, rkey, cid, image_cid, alt, caption, upload_date, created_at, indexed_at)
-    SELECT ${did}, ${rkey}, ${cid}, ${imageCid}, ${alt}, ${caption}, ${record.uploadDate}, ${createdAt}, now()
+    INSERT INTO ${photoIndex} (did, rkey, cid, image_cid, alt, caption, upload_date, created_at, indexed_at, post_rkey)
+    SELECT ${did}, ${rkey}, ${cid}, ${imageCid}, ${alt}, ${caption}, ${record.uploadDate}, ${createdAt}, now(), ${postRkey}
     WHERE EXISTS (SELECT 1 FROM ${member} WHERE ${member.did} = ${did} FOR SHARE)
+      AND NOT EXISTS (SELECT 1 FROM ${deletedPost} WHERE ${deletedPost.did} = ${did} AND ${deletedPost.rkey} = ${postRkey})
     ON CONFLICT (did, rkey) DO UPDATE SET
       cid = excluded.cid, image_cid = excluded.image_cid, alt = excluded.alt, caption = excluded.caption,
-      upload_date = excluded.upload_date, created_at = excluded.created_at, indexed_at = excluded.indexed_at`);
+      upload_date = excluded.upload_date, created_at = excluded.created_at, indexed_at = excluded.indexed_at,
+      post_rkey = excluded.post_rkey`);
+}
+
+/** The rkey of the photo's Bluesky post, when it's in the photo's own repo. */
+export function postRkeyIn(did: string, record: PhotoRecord): string | null {
+  const match = /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(record.post.uri);
+  return match && match[1] === did && isValidRecordKey(match[2]) ? match[2] : null;
 }
 
 /** Removes one photo from the index. */
@@ -235,7 +252,7 @@ async function catchUp(): Promise<CatchUpResult> {
   const saved = await readCursor();
   let cursor = saved ?? startUs - FIRST_CURSOR_LOOKBACK_US;
   const db = await getDb();
-  // Identity events cover the whole network; only members' handle changes matter.
+  // Identity events and posts cover the whole network; only members' handle changes and post deletes matter.
   const members = new Set((await db.select({ did: member.did }).from(member)).map((m) => m.did));
   const ws = new WebSocket(jetstreamUrl(process.env.JETSTREAM_URL ?? DEFAULT_JETSTREAM_URL, cursor));
   let events = 0;
@@ -272,6 +289,8 @@ async function catchUp(): Promise<CatchUpResult> {
       events++;
       const t = eventTimeUs(event);
       const change = photoChange(event);
+      const deleted = postDelete(event);
+      const deletedByMember = deleted && members.has(deleted.did) ? deleted : null;
       const handleChange = identityChange(event);
       const handleDid = handleChange && members.has(handleChange) ? handleChange : null;
       queue = queue
@@ -281,6 +300,10 @@ async function catchUp(): Promise<CatchUpResult> {
             changes++;
             if (change.kind === "delete") await unindexPhoto(change.did, change.rkey);
             else await applyPut(change.did, change.rkey, change.cid, change.record);
+          }
+          if (deletedByMember) {
+            changes++;
+            await db.insert(deletedPost).values(deletedByMember).onConflictDoNothing();
           }
           if (handleDid) await refreshHandle(handleDid);
           if (t !== null && t > cursor) cursor = t;
@@ -298,6 +321,34 @@ async function catchUp(): Promise<CatchUpResult> {
   await writeCursor(cursor);
   if (failed) throw failed.err;
   return { events, changes, cursor, stoppedBy };
+}
+
+/**
+ * Deletes the photos that shared a Bluesky post their member deleted, or
+ * drops them from the index when the member's sign-in is gone. A failure
+ * leaves the photo matched, so the next run tries again.
+ */
+async function deletePhotosOfDeletedPosts(): Promise<number> {
+  const db = await getDb();
+  const matched = await db
+    .select({ did: photoIndex.did, rkey: photoIndex.rkey, postRkey: deletedPost.rkey })
+    .from(photoIndex)
+    .innerJoin(deletedPost, and(eq(deletedPost.did, photoIndex.did), eq(deletedPost.rkey, photoIndex.postRkey)));
+  let done = 0;
+  for (const { did, rkey, postRkey } of matched) {
+    try {
+      const outcome = await deletePhotoAfterPost(did, rkey, postRkey);
+      if (outcome === "no_sign_in") console.warn("Hiding a photo whose Bluesky post was deleted", { did, rkey });
+      // Only the row for that post: a photo posted again at the key stays.
+      await db
+        .delete(photoIndex)
+        .where(and(eq(photoIndex.did, did), eq(photoIndex.rkey, rkey), eq(photoIndex.postRkey, postRkey)));
+      done++;
+    } catch (err) {
+      console.warn("Couldn't delete a photo whose Bluesky post was deleted; trying again next run", { did, rkey, err });
+    }
+  }
+  return done;
 }
 
 /** Members whose photos haven't been copied into the index yet, a few per tick. */
@@ -320,13 +371,15 @@ async function backfillPending(): Promise<number> {
 }
 
 /**
- * One run of the indexer: Jetstream catch-up, then a few pending member
- * backfills. Returns null if another instance is already running it.
+ * One run of the indexer: Jetstream catch-up, then deleting photos whose
+ * Bluesky posts were deleted, then a few pending member backfills. Returns
+ * null if another instance is already running it.
  */
-export async function indexTick(): Promise<{ catchUp: CatchUpResult; backfilled: number } | null> {
+export async function indexTick(): Promise<{ catchUp: CatchUpResult; postDeletes: number; backfilled: number } | null> {
   return withTryLock("photo-index-tick", async () => {
     const result = await catchUp();
+    const postDeletes = await deletePhotosOfDeletedPosts();
     const backfilled = await backfillPending();
-    return { catchUp: result, backfilled };
+    return { catchUp: result, postDeletes, backfilled };
   });
 }

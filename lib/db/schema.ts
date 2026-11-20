@@ -83,12 +83,30 @@ export const photoIndex = pgTable(
     uploadDate: text("upload_date").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The rkey of the photo's Bluesky post in the same repo, so deleting the post can delete the photo. */
+    postRkey: text("post_rkey"),
   },
   (t) => [
     primaryKey({ columns: [t.did, t.rkey] }),
+    index("photo_index_did_post_rkey_idx").on(t.did, t.postRkey),
     index("photo_index_created_at_idx").on(t.createdAt),
     index("photo_index_did_created_at_idx").on(t.did, t.createdAt),
   ],
+);
+
+/**
+ * Bluesky posts members deleted, seen on Jetstream. A photo that shared one
+ * is deleted (or, without the member's sign-in, kept out of the index),
+ * whichever arrives first: the post delete or the photo.
+ */
+export const deletedPost = pgTable(
+  "deleted_post",
+  {
+    did: text("did").notNull(),
+    rkey: text("rkey").notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.did, t.rkey] })],
 );
 
 /** Small bits of server state, such as the Jetstream cursor. */

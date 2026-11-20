@@ -481,6 +481,46 @@ export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void
 }
 
 /**
+ * Deletes `did`'s photo `rkey` after its Bluesky post `postRkey` was
+ * deleted, using the member's stored sign-in. Only deletes the record if it
+ * still shares that post, so a photo posted again at the same key stays.
+ * Returns what happened; throws on a failure worth trying again. Leaves the
+ * index to the caller.
+ */
+export async function deletePhotoAfterPost(
+  did: string,
+  rkey: string,
+  postRkey: string,
+): Promise<"deleted" | "gone" | "replaced" | "no_sign_in"> {
+  let agent: Agent;
+  try {
+    agent = await agentFor(did);
+  } catch {
+    return "no_sign_in";
+  }
+  let current: { cid?: string; value: unknown };
+  try {
+    ({ data: current } = await agent.com.atproto.repo.getRecord({ repo: did, collection: PHOTO_COLLECTION, rkey }));
+  } catch (err) {
+    if (errorName(err) === "RecordNotFound") return "gone";
+    throw err;
+  }
+  const postUri = (current.value as { post?: { uri?: unknown } } | null)?.post?.uri;
+  if (postUri !== `at://${did}/${POST_COLLECTION}/${postRkey}` || !current.cid) return "replaced";
+  // swapRecord: fails rather than delete a record that changed since it was read.
+  await agent.com.atproto.repo.deleteRecord({
+    repo: did,
+    collection: PHOTO_COLLECTION,
+    rkey,
+    swapRecord: current.cid,
+  });
+  await forgetGroupPost(did, rkey).catch((err) =>
+    console.warn("Couldn't forget a deleted group post", { did, rkey, err }),
+  );
+  return "deleted";
+}
+
+/**
  * Applies a change to the photo index. The index catches up from Jetstream
  * anyway, so a failure here only delays the change; it never fails the
  * write. Imported lazily: the index module imports this one.

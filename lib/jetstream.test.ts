@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { eventTimeUs, identityChange, jetstreamUrl, photoChange } from "./jetstream";
+import { eventTimeUs, identityChange, jetstreamUrl, photoChange, postDelete } from "./jetstream";
 
 const did = "did:plc:abcdefghijklmnopqrstuvwx";
 
 describe("jetstreamUrl", () => {
-  it("asks for photos only, from the cursor", () => {
+  it("asks for photos and posts, from the cursor", () => {
     const url = new URL(jetstreamUrl("wss://js.example/subscribe", 1700000000000000));
-    expect(url.searchParams.get("wantedCollections")).toBe("com.foto-log.photo");
+    expect(url.searchParams.getAll("wantedCollections")).toEqual(["com.foto-log.photo", "app.bsky.feed.post"]);
     expect(url.searchParams.get("cursor")).toBe("1700000000000000");
     expect(new URL(jetstreamUrl("wss://js.example/subscribe", null)).searchParams.has("cursor")).toBe(false);
   });
@@ -56,5 +56,20 @@ describe("identityChange", () => {
     expect(identityChange({ kind: "commit", did: "did:plc:abc" })).toBeNull();
     expect(identityChange({ kind: "account", did: "did:plc:abc" })).toBeNull();
     expect(identityChange(null)).toBeNull();
+  });
+});
+
+describe("post deletes", () => {
+  it("reads only post deletes", () => {
+    const event = (operation: string, collection = "app.bsky.feed.post") => ({
+      did,
+      time_us: 1700000000000000,
+      kind: "commit",
+      commit: { operation, collection, rkey: "3abc" },
+    });
+    expect(postDelete(event("delete"))).toEqual({ did, rkey: "3abc" });
+    expect(postDelete(event("create"))).toBeNull();
+    expect(postDelete(event("delete", "com.foto-log.photo"))).toBeNull();
+    expect(postDelete({ kind: "identity", did })).toBeNull();
   });
 });
