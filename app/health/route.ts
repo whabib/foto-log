@@ -1,4 +1,5 @@
 import { getPool } from "@/lib/db";
+import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function GET() {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {
-    console.error("Health check failed", err);
+    log.error("Health check failed", { err });
     return Response.json({ ok: false }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 }

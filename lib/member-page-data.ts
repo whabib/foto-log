@@ -16,6 +16,7 @@ import { isValidDateKey, parsePhotoRecordKey, photoRecordKey } from "@/lib/photo
 import { railWindow } from "@/lib/photos/rail";
 import { fetchPhoto, listPhotos, photoNeighbors, type StoredPhoto } from "@/lib/photos/server";
 import type { MemberRef } from "@/lib/photos/urls";
+import { log } from "@/lib/log";
 
 export const RECENT_PHOTOS = 6;
 
@@ -129,7 +130,7 @@ async function uploaderOf(did: string): Promise<MemberRef> {
     const [actor, names] = await Promise.all([resolveActor(did), primaryNames([did])]);
     return { did, handle: actor?.handle ?? null, name: names.get(did) ?? null };
   } catch (err) {
-    console.warn("Couldn't look up a photo's uploader", { did, err });
+    log.warn("Couldn't look up a photo's uploader", { did, err });
     return { did, handle: null };
   }
 }
@@ -138,7 +139,7 @@ async function uploaderOf(did: string): Promise<MemberRef> {
 async function withAuthorNames(guestbook: Guestbook): Promise<Guestbook> {
   if (guestbook.entries.length === 0) return guestbook;
   const names = await primaryNames(guestbook.entries.map((e) => e.author.did)).catch((err) => {
-    console.warn("Couldn't load guestbook names", { err });
+    log.warn("Couldn't load guestbook names", { err });
     return new Map<string, string>();
   });
   if (names.size === 0) return guestbook;

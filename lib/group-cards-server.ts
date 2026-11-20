@@ -2,6 +2,7 @@ import "server-only";
 import { type FriendCard, newestCards } from "@/lib/friends";
 import { memberRows } from "@/lib/friends-server";
 import { groupsOf } from "@/lib/groups-server";
+import { log } from "@/lib/log";
 
 /** How many groups the right column shows. */
 const GROUP_CARDS = 6;
@@ -15,7 +16,7 @@ export async function groupCards(memberDid: string, count = GROUP_CARDS): Promis
       count,
     );
   } catch (err) {
-    console.warn("Couldn't load groups", { did: memberDid, err });
+    log.warn("Couldn't load groups", { did: memberDid, err });
     return [];
   }
 }

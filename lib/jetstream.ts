@@ -3,10 +3,23 @@ import { PHOTO_COLLECTION } from "@/lib/photo-record";
 const POST_COLLECTION = "app.bsky.feed.post";
 
 /**
- * Bluesky's public Jetstream, filtered to foto-log photos and Bluesky posts
- * (for members' post deletes). Override with JETSTREAM_URL.
+ * Bluesky's public Jetstream instances, filtered to foto-log photos and
+ * Bluesky posts (for members' post deletes). The first is tried first; the
+ * rest are fallbacks when it can't be reached. Override with JETSTREAM_URL
+ * (one URL, or several separated by commas).
  */
-export const DEFAULT_JETSTREAM_URL = "wss://jetstream2.us-east.bsky.network/subscribe";
+export const DEFAULT_JETSTREAM_URLS = [
+  "wss://jetstream2.us-east.bsky.network/subscribe",
+  "wss://jetstream1.us-east.bsky.network/subscribe",
+  "wss://jetstream1.us-west.bsky.network/subscribe",
+  "wss://jetstream2.us-west.bsky.network/subscribe",
+];
+
+/** The Jetstream URLs to try, in order: JETSTREAM_URL's if set, otherwise the defaults. */
+export function jetstreamBases(override: string | undefined): string[] {
+  const urls = (override ?? "").split(",").map((u) => u.trim()).filter(Boolean);
+  return urls.length > 0 ? urls : DEFAULT_JETSTREAM_URLS;
+}
 
 export function jetstreamUrl(base: string, cursorUs: number | null): string {
   const url = new URL(base);

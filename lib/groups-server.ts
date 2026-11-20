@@ -4,6 +4,7 @@ import { cache } from "react";
 import type { CurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { fotologGroup, groupMember, groupPost, groupPostClaim, member } from "@/lib/db/schema";
+import { log } from "@/lib/log";
 
 export type JoinPolicy = "open" | "approval";
 export type Group = { did: string; joinPolicy: JoinPolicy };
@@ -224,7 +225,7 @@ export async function releaseGroupPost(groupDid: string, uploadDate: string, mem
         eq(groupPostClaim.memberDid, memberDid),
       ),
     )
-    .catch((err) => console.warn("Couldn't release a group post claim; it expires", { groupDid, err }));
+    .catch((err) => log.warn("Couldn't release a group post claim; it expires", { groupDid, err }));
 }
 
 /** Notes that `memberDid` posted the group's photo `rkey` through foto-log. */

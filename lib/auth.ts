@@ -9,6 +9,7 @@ import { bannedMember, closedMember, oauthSession, userSession } from "@/lib/db/
 import { isGroup } from "@/lib/groups-server";
 import { getOAuthClient } from "@/lib/oauth/client";
 import { fetchFromPds } from "@/lib/safe-fetch";
+import { log } from "@/lib/log";
 
 // "__Host-" cookies must be Secure, so dev (plain http) uses a plain name.
 export const SESSION_COOKIE = isProduction ? "__Host-fotolog_session" : "fotolog_session";
@@ -261,7 +262,7 @@ export async function endAllSessions(did: string): Promise<void> {
     await db.delete(userSession).where(eq(userSession.did, did));
     const client = await getOAuthClient();
     await client.revoke(did).catch((err) => {
-      console.warn("OAuth revoke failed", { did, err });
+      log.warn("OAuth revoke failed", { did, err });
     });
   });
 }
@@ -282,6 +283,6 @@ async function revokeIfUnusedLocked(did: string): Promise<void> {
   if (await isGroup(did)) return;
   const client = await getOAuthClient();
   await client.revoke(did).catch((err) => {
-    console.warn("OAuth revoke failed", { did, err });
+    log.warn("OAuth revoke failed", { did, err });
   });
 }

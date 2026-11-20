@@ -7,6 +7,7 @@ import { isBuiltInAdminStrict } from "@/lib/admin-server";
 import { browserAccounts, endAllSessions, getCurrentUser, signOutOfBrowser, switchAccount } from "@/lib/auth";
 import { resolveActor } from "@/lib/identity";
 import { agentFor, PhotoError } from "@/lib/photos/server";
+import { log } from "@/lib/log";
 
 export type DeleteState = { status: "idle" } | { status: "error"; message: string };
 
@@ -34,7 +35,7 @@ export async function deleteAccountAction(_prev: DeleteState, form: FormData): P
     await forgetMember(user.did);
   } catch (err) {
     if (err instanceof DeleteAccountError || err instanceof PhotoError) return { status: "error", message: err.message };
-    console.error("Deleting an account failed", { did: user.did, err });
+    log.error("Deleting an account failed", { did: user.did, err });
     return {
       status: "error",
       message: deleteRecords
@@ -49,9 +50,9 @@ export async function deleteAccountAction(_prev: DeleteState, form: FormData): P
     if (next) await switchAccount(next.did);
     else await signOutOfBrowser();
   } catch (err) {
-    console.warn("Switching accounts after delete failed", { err });
+    log.warn("Switching accounts after delete failed", { err });
   }
-  await endAllSessions(user.did).catch((err) => console.warn("Revoking tokens after delete failed", { err }));
-  await forgetTokens(user.did).catch((err) => console.warn("Dropping tokens after delete failed", { err }));
+  await endAllSessions(user.did).catch((err) => log.warn("Revoking tokens after delete failed", { err }));
+  await forgetTokens(user.did).catch((err) => log.warn("Dropping tokens after delete failed", { err }));
   redirect(deleteRecords ? "/goodbye" : "/goodbye?kept=1");
 }

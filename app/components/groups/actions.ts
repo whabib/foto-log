@@ -3,6 +3,7 @@
 import { isValidDid } from "@atproto/syntax";
 import { getCurrentUser } from "@/lib/auth";
 import { GroupError, joinGroup, leaveGroup, type MembershipStatus } from "@/lib/groups-server";
+import { log } from "@/lib/log";
 
 export type GroupActionState = { status: "ok"; membership: MembershipStatus | null } | { status: "error"; message: string };
 
@@ -19,7 +20,7 @@ export async function setMembershipAction(groupDid: string, join: boolean): Prom
     return { status: "ok", membership: await joinGroup(user, groupDid) };
   } catch (err) {
     if (err instanceof GroupError) return { status: "error", message: err.message };
-    console.error("Changing group membership failed", { did: user.did, groupDid, join, err });
+    log.error("Changing group membership failed", { did: user.did, groupDid, join, err });
     return { status: "error", message: "Something went wrong. Please try again." };
   }
 }

@@ -2,6 +2,7 @@ import { isValidDid } from "@atproto/syntax";
 import { getCurrentUser } from "@/lib/auth";
 import { baseUrl } from "@/lib/config";
 import { PhotoError, postPhoto } from "@/lib/photos/server";
+import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
         { status: STATUS[err.code] },
       );
     }
-    console.error("Posting a photo failed", { did: user.did, err });
+    log.error("Posting a photo failed", { did: user.did, err });
     return Response.json(
       { error: "Something went wrong saving your photo. Please try again." },
       { status: 502 },

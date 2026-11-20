@@ -15,6 +15,7 @@ import { MAX_IMAGE_BYTES } from "@/lib/photo-record";
 import { agentFor, PhotoError } from "@/lib/photos/server";
 import { fetchFromPds } from "@/lib/safe-fetch";
 import { TtlCache } from "@/lib/ttl-cache";
+import { log } from "@/lib/log";
 
 // Read on every member page view; a member's own changes update it here.
 const cache = new TtlCache<string, MemberImages>(60_000, 5000);
@@ -38,11 +39,11 @@ export async function getMemberImages(actor: Actor, opts: { fresh?: boolean } = 
       images = memberImagesFromRecord(jsonToLex(body.value));
     } else if (res.status !== 400) {
       // 400 is RecordNotFound: the member hasn't set any images.
-      console.warn("Couldn't read member profile record", { did: actor.did, status: res.status });
+      log.warn("Couldn't read member profile record", { did: actor.did, status: res.status });
       return NO_MEMBER_IMAGES;
     }
   } catch (err) {
-    console.warn("Couldn't read member profile record", { did: actor.did, err });
+    log.warn("Couldn't read member profile record", { did: actor.did, err });
     return NO_MEMBER_IMAGES;
   }
   cache.set(actor.did, images);

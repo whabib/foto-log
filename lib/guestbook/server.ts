@@ -18,6 +18,7 @@ import {
   type ThreadReplies,
   type WhoCanSignChoice,
 } from "./entries";
+import { log } from "@/lib/log";
 
 const APPVIEW = "https://public.api.bsky.app";
 const POST_COLLECTION = "app.bsky.feed.post";
@@ -40,12 +41,12 @@ async function fetchThread(postUri: string): Promise<ThreadReplies | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(5000), cache: "no-store" });
     if (!res.ok) {
-      if (res.status !== 400) console.warn("Couldn't read guestbook", { postUri, status: res.status });
+      if (res.status !== 400) log.warn("Couldn't read guestbook", { postUri, status: res.status });
       return null;
     }
     return parseThreadReplies(await res.json());
   } catch (err) {
-    console.warn("Couldn't read guestbook", { postUri, err });
+    log.warn("Couldn't read guestbook", { postUri, err });
     return null;
   }
 }
@@ -178,7 +179,7 @@ async function tryClose(target: { did: string; rkey: string }): Promise<void> {
   try {
     await closeGuestbook(target);
   } catch (err) {
-    console.error("Couldn't close full guestbook", { postUri, err });
+    log.error("Couldn't close full guestbook", { postUri, err });
   }
 }
 

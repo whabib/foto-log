@@ -23,6 +23,7 @@ import {
 } from "@/lib/photo-record";
 import { buildPostText, graphemeLength, maxCaptionGraphemes, type PostCredit } from "./text";
 import { photoKeyPath, photoPath } from "./urls";
+import { log } from "@/lib/log";
 
 const POST_COLLECTION = "app.bsky.feed.post";
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -61,7 +62,7 @@ export async function agentFor(did: string): Promise<Agent> {
     const client = await getOAuthClient();
     return new Agent(await client.restore(did));
   } catch (err) {
-    console.warn("Could not restore OAuth session", { did, err });
+    log.warn("Could not restore OAuth session", { did, err });
     throw new PhotoError("session_expired", "Your sign-in has expired. Please sign in again.");
   }
 }
@@ -348,7 +349,7 @@ async function writePhoto(
       savedPostUri = (data.value as { post?: { uri?: unknown } }).post?.uri as string | undefined;
     } catch (readErr) {
       if (errorName(readErr) !== "RecordNotFound") {
-        console.error("Photo write outcome unknown; keeping the Bluesky post", {
+        log.error("Photo write outcome unknown; keeping the Bluesky post", {
           uri: post.uri,
           err,
           readErr,
@@ -359,14 +360,14 @@ async function writePhoto(
     if (savedPostUri === post.uri) return; // it was saved after all
     if (uploadedBy) {
       await forgetGroupPost(repo, rkey).catch((forgetErr) =>
-        console.warn("Couldn't forget a group post that wasn't saved", { repo, rkey, forgetErr }),
+        log.warn("Couldn't forget a group post that wasn't saved", { repo, rkey, forgetErr }),
       );
     }
     const postRkey = post.uri.split("/").pop()!;
     await agent.com.atproto.repo
       .deleteRecord({ repo, collection: POST_COLLECTION, rkey: postRkey })
       .catch((cleanupErr) =>
-        console.error("Couldn't delete Bluesky post after failed photo write", {
+        log.error("Couldn't delete Bluesky post after failed photo write", {
           uri: post.uri,
           cleanupErr,
         }),
@@ -418,7 +419,7 @@ export async function fetchPhoto(actor: Actor, rkey: string): Promise<StoredPhot
     if (!res.ok) return null;
     body = await res.json();
   } catch (err) {
-    console.warn("Couldn't read photo from PDS", { did: actor.did, rkey, err });
+    log.warn("Couldn't read photo from PDS", { did: actor.did, rkey, err });
     return null;
   }
   try {
@@ -427,7 +428,7 @@ export async function fetchPhoto(actor: Actor, rkey: string): Promise<StoredPhot
     assertValidPhotoRecord(rkey, record);
     return { uri: body.uri, cid: body.cid, rkey, record };
   } catch (err) {
-    console.warn("Invalid photo record", { uri: body.uri, err });
+    log.warn("Invalid photo record", { uri: body.uri, err });
     return null;
   }
 }
@@ -476,7 +477,7 @@ export async function deletePhoto(user: CurrentUser, rkey: string): Promise<void
   await agent.com.atproto.repo.applyWrites({ repo: user.did, writes });
   await updateIndex((index) => index.unindexPhoto(user.did, rkey));
   await forgetGroupPost(user.did, rkey).catch((err) =>
-    console.warn("Couldn't forget a deleted group post", { did: user.did, rkey, err }),
+    log.warn("Couldn't forget a deleted group post", { did: user.did, rkey, err }),
   );
 }
 
@@ -515,7 +516,7 @@ export async function deletePhotoAfterPost(
     swapRecord: current.cid,
   });
   await forgetGroupPost(did, rkey).catch((err) =>
-    console.warn("Couldn't forget a deleted group post", { did, rkey, err }),
+    log.warn("Couldn't forget a deleted group post", { did, rkey, err }),
   );
   return "deleted";
 }
@@ -531,7 +532,7 @@ async function updateIndex(
   try {
     await change(await import("@/lib/photo-index-server"));
   } catch (err) {
-    console.warn("Couldn't update the photo index; Jetstream will catch up", { err });
+    log.warn("Couldn't update the photo index; Jetstream will catch up", { err });
   }
 }
 
@@ -567,7 +568,7 @@ export async function listPhotos(
       if (!res.ok) break;
       body = await res.json();
     } catch (err) {
-      console.warn("Couldn't list photos from PDS", { did: actor.did, err });
+      log.warn("Couldn't list photos from PDS", { did: actor.did, err });
       break;
     }
     const records = body.records ?? [];
@@ -578,7 +579,7 @@ export async function listPhotos(
         assertValidPhotoRecord(rkey, record);
         photos.push({ uri: r.uri, cid: r.cid, rkey, record });
       } catch (err) {
-        console.warn("Skipping invalid photo record", { uri: r.uri, err });
+        log.warn("Skipping invalid photo record", { uri: r.uri, err });
       }
     }
     if (records.length === 0 || !body.cursor || body.cursor === cursor) break;

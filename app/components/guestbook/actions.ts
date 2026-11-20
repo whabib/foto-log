@@ -6,6 +6,7 @@ import { GuestbookError, hideEntry, setWhoCanSign, signGuestbook } from "@/lib/g
 import { resolveActor } from "@/lib/identity";
 import { parsePhotoRecordKey } from "@/lib/photo-record";
 import { fetchPhoto } from "@/lib/photos/server";
+import { log } from "@/lib/log";
 
 export type SignState = { status: "idle" } | { status: "signed" } | { status: "error"; message: string; login?: boolean };
 
@@ -33,7 +34,7 @@ export async function signGuestbookAction(
     if (err instanceof GuestbookError) {
       return { status: "error", message: err.message, login: err.code === "session_expired" };
     }
-    console.error("Signing guestbook failed", { did: user.did, rkey, err });
+    log.error("Signing guestbook failed", { did: user.did, rkey, err });
     return { status: "error", message: "Something went wrong. Please try again." };
   }
   return { status: "signed" };
@@ -64,7 +65,7 @@ async function ownerAction(
     if (err instanceof GuestbookError) {
       return { status: "error", message: err.message, login: err.code === "session_expired" };
     }
-    console.error("Guestbook owner change failed", { did: user.did, rkey, err });
+    log.error("Guestbook owner change failed", { did: user.did, rkey, err });
     return { status: "error", message: "Something went wrong. Please try again." };
   }
   return { status: "done" };

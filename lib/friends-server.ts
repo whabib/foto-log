@@ -19,6 +19,7 @@ import { agentFor, PhotoError } from "@/lib/photos/server";
 import { photoKeyPath, thumbnailUrl } from "@/lib/photos/urls";
 import { fetchFromPds } from "@/lib/safe-fetch";
 import { TtlCache } from "@/lib/ttl-cache";
+import { log } from "@/lib/log";
 
 /** listRecords pages (of 100) to read for one list: enough for a full one. */
 const MAX_LIST_PAGES = Math.ceil(MAX_FRIENDS / 100);
@@ -66,12 +67,12 @@ async function readFriends(actor: Actor): Promise<{ friends: string[]; complete:
     try {
       const res = await fetchFromPds(url);
       if (!res.ok) {
-        console.warn("Couldn't list friends", { did: actor.did, status: res.status });
+        log.warn("Couldn't list friends", { did: actor.did, status: res.status });
         return { friends, complete: false };
       }
       body = await res.json();
     } catch (err) {
-      console.warn("Couldn't list friends", { did: actor.did, err });
+      log.warn("Couldn't list friends", { did: actor.did, err });
       return { friends, complete: false };
     }
     const records = body.records ?? [];
@@ -111,11 +112,11 @@ export async function isOnList(viewerDid: string, did: string): Promise<boolean>
     } else if (res.status === 400) {
       onList = false; // RecordNotFound
     } else {
-      console.warn("Couldn't read friend record", { viewer: viewerDid, did, status: res.status });
+      log.warn("Couldn't read friend record", { viewer: viewerDid, did, status: res.status });
       return false;
     }
   } catch (err) {
-    console.warn("Couldn't read friend record", { viewer: viewerDid, did, err });
+    log.warn("Couldn't read friend record", { viewer: viewerDid, did, err });
     return false;
   }
   onListCache.set(key, onList);
@@ -290,7 +291,7 @@ export async function welcomeNewMember(user: CurrentUser): Promise<boolean> {
       if (known) return false;
       const starter = await resolveActor(STARTER_FRIEND);
       if (!starter) {
-        console.warn("Couldn't resolve the starter friend", { handle: STARTER_FRIEND });
+        log.warn("Couldn't resolve the starter friend", { handle: STARTER_FRIEND });
         return false; // tried again next sign-in
       }
       // The starter account shows up on lists once it has signed in itself.
@@ -303,7 +304,7 @@ export async function welcomeNewMember(user: CurrentUser): Promise<boolean> {
       return added.length > 0;
     });
   } catch (err) {
-    console.error("Couldn't welcome new member", { did: user.did, err });
+    log.error("Couldn't welcome new member", { did: user.did, err });
     return false;
   }
 }
