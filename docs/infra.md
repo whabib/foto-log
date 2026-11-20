@@ -8,7 +8,7 @@ Everything is in GCP project `foto-log-app` (billing: Pointless Enterprises), re
 |---|---|
 | Cloud Run service | `foto-log-web` (min 0 / max 3 instances, 512 MiB, ingress: load balancer only) |
 | Runtime service account | `foto-log-web@foto-log-app.iam.gserviceaccount.com`: `roles/cloudsql.client` on the project, plus `roles/secretmanager.secretAccessor` on the four secrets below only |
-| Artifact Registry (Docker) | `us-central1-docker.pkg.dev/foto-log-app/foto-log`, image `web` |
+| Artifact Registry (Docker) | `us-central1-docker.pkg.dev/foto-log-app/foto-log`, image `web`. Deploy, preview and scan images (`scan-*` tags) all go here. Cleanup policy (set by hand) keeps the 25 most recent versions, so a rollback target is always still there. |
 
 ### Cloud Run settings
 
