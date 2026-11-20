@@ -1,0 +1,29 @@
+{
+  "displayName": "foto-log.com is down",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "foto-log.com/health is failing from 2 or more regions",
+      "conditionThreshold": {
+        "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\" AND resource.label.host=\"foto-log.com\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "600s",
+            "perSeriesAligner": "ALIGN_NEXT_OLDER",
+            "crossSeriesReducer": "REDUCE_COUNT_FALSE",
+            "groupByFields": ["resource.label.host"]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 1,
+        "duration": "300s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "86400s" },
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "The uptime check on https://foto-log.com/health is failing. /health returns 503 when the app can't reach Cloud SQL. Check the Cloud Run logs for `Health check failed`, the Cloud SQL instance, and whether the last deploy rolled back. See docs/infra.md."
+  }
+}

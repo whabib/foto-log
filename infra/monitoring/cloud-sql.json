@@ -1,0 +1,44 @@
+{
+  "displayName": "Cloud SQL foto-log-db is running out of room",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "CPU above 80% for 15 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"cloudsql.googleapis.com/database/cpu/utilization\" AND resource.type=\"cloudsql_database\" AND resource.label.database_id=\"foto-log-app:foto-log-db\"",
+        "aggregations": [{ "alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_MEAN" }],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0.8,
+        "duration": "900s",
+        "trigger": { "count": 1 }
+      }
+    },
+    {
+      "displayName": "Memory above 90% for 15 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"cloudsql.googleapis.com/database/memory/utilization\" AND resource.type=\"cloudsql_database\" AND resource.label.database_id=\"foto-log-app:foto-log-db\"",
+        "aggregations": [{ "alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_MEAN" }],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0.9,
+        "duration": "900s",
+        "trigger": { "count": 1 }
+      }
+    },
+    {
+      "displayName": "Disk above 80%",
+      "conditionThreshold": {
+        "filter": "metric.type=\"cloudsql.googleapis.com/database/disk/utilization\" AND resource.type=\"cloudsql_database\" AND resource.label.database_id=\"foto-log-app:foto-log-db\"",
+        "aggregations": [{ "alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_MEAN" }],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0.8,
+        "duration": "600s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "86400s" },
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Cloud SQL instance foto-log-db (db-f1-micro: shared core, 0.6 GB) is short on CPU, memory or disk. Storage grows on its own (auto-increase is on), so a disk alert mostly means the bill is growing. Sustained CPU or memory means it's time for a bigger tier; Query Insights shows which queries cost the most. See docs/infra.md."
+  }
+}
