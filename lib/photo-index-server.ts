@@ -5,15 +5,16 @@ import { getDb, withTryLock } from "@/lib/db";
 import { appState, bannedMember, deletedPost, member, photoIndex } from "@/lib/db/schema";
 import { resolveActor } from "@/lib/identity";
 import {
-  DEFAULT_JETSTREAM_URL,
   eventTimeUs,
   identityChange,
+  jetstreamBases,
   jetstreamUrl,
   photoChange,
   postDelete,
 } from "@/lib/jetstream";
 import { assertValidPhotoRecord, type PhotoRecord } from "@/lib/photo-record";
 import { deletePhotoAfterPost, scanPhotos } from "@/lib/photos/server";
+import { log } from "@/lib/log";
 
 const CURSOR_KEY = "jetstream_cursor";
 
@@ -95,7 +96,7 @@ export async function backfillMember(did: string): Promise<boolean> {
       }
     });
   } catch (err) {
-    console.warn("Backfill couldn't read the repo", { did, err });
+    log.warn("Backfill couldn't read the repo", { did, err });
     return false;
   }
   if (complete) {
@@ -112,7 +113,7 @@ export async function backfillMember(did: string): Promise<boolean> {
     }
   } else {
     // Only a repo far past one photo a day gets here: keep what was read, delete nothing.
-    console.warn("Backfill stopped at its page limit", { did, pages: MAX_BACKFILL_PAGES });
+    log.warn("Backfill stopped at its page limit", { did, pages: MAX_BACKFILL_PAGES });
   }
   await db.update(member).set({ backfilledAt: new Date(), handle: actor.handle }).where(eq(member.did, did));
   return true;
@@ -151,14 +152,14 @@ export async function backfillOnSignIn(did: string): Promise<void> {
     if (!row || row.at) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
-      backfillMember(did).catch((err) => console.warn("Sign-in backfill failed; the indexer will retry", { did, err })),
+      backfillMember(did).catch((err) => log.warn("Sign-in backfill failed; the indexer will retry", { did, err })),
       new Promise((resolve) => {
         timer = setTimeout(resolve, SIGN_IN_BACKFILL_MS);
       }),
     ]);
     clearTimeout(timer);
   } catch (err) {
-    console.warn("Sign-in backfill failed; the indexer will retry", { did, err });
+    log.warn("Sign-in backfill failed; the indexer will retry", { did, err });
   }
 }
 
@@ -240,21 +241,41 @@ async function writeCursor(us: number): Promise<void> {
     .onConflictDoUpdate({ target: appState.key, set: { value, updatedAt: new Date() } });
 }
 
-export type CatchUpResult = { events: number; changes: number; cursor: number; stoppedBy: "caught-up" | "quiet" | "time" | "error" };
+export type CatchUpResult = {
+  events: number;
+  changes: number;
+  cursor: number;
+  /** How far the saved cursor is behind real time when the catch-up ends. */
+  lagSeconds: number;
+  /** The Jetstream instance read from (the last one tried, if none worked). */
+  host: string;
+  stoppedBy: "caught-up" | "quiet" | "time" | "error";
+};
+
+/**
+ * How far before the saved cursor each read starts. Each Jetstream instance
+ * stamps events with its own clock, and the saved cursor may come from a
+ * different instance than the one read now (a fallback last run, the
+ * primary this run), so the same moment can land a little apart on two of
+ * them. Replaying a few seconds twice is harmless: every change is
+ * idempotent and applied in order.
+ */
+const CURSOR_REWIND_US = 10 * 1_000_000;
 
 /**
  * Reads foto-log photo changes from Jetstream since the saved cursor and
  * applies them to the index, then saves the new cursor. Stops once it
- * reaches the present, goes quiet, or runs out of time.
+ * reaches the present, goes quiet, or runs out of time. If an instance
+ * can't be reached, or sends nothing, tries the next one.
  */
 async function catchUp(): Promise<CatchUpResult> {
   const startUs = Date.now() * 1000;
+  const deadlineAt = Date.now() + CATCH_UP_MS;
   const saved = await readCursor();
   let cursor = saved ?? startUs - FIRST_CURSOR_LOOKBACK_US;
   const db = await getDb();
   // Identity events and posts cover the whole network; only members' handle changes and post deletes matter.
   const members = new Set((await db.select({ did: member.did }).from(member)).map((m) => m.did));
-  const ws = new WebSocket(jetstreamUrl(process.env.JETSTREAM_URL ?? DEFAULT_JETSTREAM_URL, cursor));
   let events = 0;
   let changes = 0;
   // Apply events one at a time, in order.
@@ -262,65 +283,89 @@ async function catchUp(): Promise<CatchUpResult> {
   // The first failed write. Later events are skipped so the cursor stops before it.
   let failed: { err: unknown } | undefined;
 
-  const stoppedBy = await new Promise<CatchUpResult["stoppedBy"]>((resolve) => {
-    let idle: ReturnType<typeof setTimeout> | undefined;
-    const finish = (why: CatchUpResult["stoppedBy"]) => {
-      clearTimeout(idle);
-      clearTimeout(deadline);
-      ws.close();
-      resolve(why);
-    };
-    const deadline = setTimeout(() => finish("time"), CATCH_UP_MS);
-    const touch = () => {
-      clearTimeout(idle);
-      idle = setTimeout(() => finish("quiet"), IDLE_MS);
-    };
-    ws.addEventListener("open", touch);
-    ws.addEventListener("error", () => finish("error"));
-    ws.addEventListener("close", () => finish("error"));
-    ws.addEventListener("message", (msg) => {
+  /** Reads one Jetstream instance until it stops; returns why, and how many messages it sent. */
+  const readFrom = (base: string, fromUs: number, timeLimitMs: number) =>
+    new Promise<{ stoppedBy: CatchUpResult["stoppedBy"]; received: number }>((resolve) => {
+      const ws = new WebSocket(jetstreamUrl(base, fromUs));
+      let received = 0;
+      let idle: ReturnType<typeof setTimeout> | undefined;
+      const finish = (why: CatchUpResult["stoppedBy"]) => {
+        clearTimeout(idle);
+        clearTimeout(deadline);
+        ws.close();
+        resolve({ stoppedBy: why, received });
+      };
+      const deadline = setTimeout(() => finish("time"), timeLimitMs);
+      const touch = () => {
+        clearTimeout(idle);
+        idle = setTimeout(() => finish("quiet"), IDLE_MS);
+      };
+      // Armed before the handshake too, so an instance that never answers leaves time for the next.
       touch();
-      let event: unknown;
-      try {
-        event = JSON.parse(String(msg.data));
-      } catch {
-        return;
-      }
-      events++;
-      const t = eventTimeUs(event);
-      const change = photoChange(event);
-      const deleted = postDelete(event);
-      const deletedByMember = deleted && members.has(deleted.did) ? deleted : null;
-      const handleChange = identityChange(event);
-      const handleDid = handleChange && members.has(handleChange) ? handleChange : null;
-      queue = queue
-        .then(async () => {
-          if (failed) return;
-          if (change) {
-            changes++;
-            if (change.kind === "delete") await unindexPhoto(change.did, change.rkey);
-            else await applyPut(change.did, change.rkey, change.cid, change.record);
-          }
-          if (deletedByMember) {
-            changes++;
-            await db.insert(deletedPost).values(deletedByMember).onConflictDoNothing();
-          }
-          if (handleDid) await refreshHandle(handleDid);
-          if (t !== null && t > cursor) cursor = t;
-        })
-        .catch((err: unknown) => {
-          failed ??= { err };
-          finish("error");
-        });
-      if (t !== null && t >= startUs) finish("caught-up");
+      ws.addEventListener("open", touch);
+      ws.addEventListener("error", () => finish("error"));
+      ws.addEventListener("close", () => finish("error"));
+      ws.addEventListener("message", (msg) => {
+        touch();
+        received++;
+        let event: unknown;
+        try {
+          event = JSON.parse(String(msg.data));
+        } catch {
+          return;
+        }
+        events++;
+        const t = eventTimeUs(event);
+        const change = photoChange(event);
+        const deleted = postDelete(event);
+        const deletedByMember = deleted && members.has(deleted.did) ? deleted : null;
+        const handleChange = identityChange(event);
+        const handleDid = handleChange && members.has(handleChange) ? handleChange : null;
+        queue = queue
+          .then(async () => {
+            if (failed) return;
+            if (change) {
+              changes++;
+              if (change.kind === "delete") await unindexPhoto(change.did, change.rkey);
+              else await applyPut(change.did, change.rkey, change.cid, change.record);
+            }
+            if (deletedByMember) {
+              changes++;
+              await db.insert(deletedPost).values(deletedByMember).onConflictDoNothing();
+            }
+            if (handleDid) await refreshHandle(handleDid);
+            if (t !== null && t > cursor) cursor = t;
+          })
+          .catch((err: unknown) => {
+            failed ??= { err };
+            finish("error");
+          });
+        if (t !== null && t >= startUs) finish("caught-up");
+      });
     });
-  });
 
-  await queue;
+  const bases = jetstreamBases(process.env.JETSTREAM_URL);
+  let stoppedBy: CatchUpResult["stoppedBy"] = "time";
+  let host = "";
+  for (const base of bases) {
+    const timeLeft = deadlineAt - Date.now();
+    if (timeLeft <= 0) break;
+    host = new URL(base).host;
+    const from = Math.max(1, cursor - CURSOR_REWIND_US);
+    const outcome = await readFrom(base, from, timeLeft);
+    await queue;
+    stoppedBy = outcome.stoppedBy;
+    // The stream always carries posts, so an instance that sends nothing at all is down or stalled.
+    const nothing = outcome.received === 0 && (stoppedBy === "error" || stoppedBy === "quiet");
+    if (failed || !nothing) break;
+    log.warn("Jetstream instance sent nothing; trying the next one", { host, stoppedBy });
+  }
+
   // Saved only up to the last event applied, so the next run picks up from there.
   await writeCursor(cursor);
   if (failed) throw failed.err;
-  return { events, changes, cursor, stoppedBy };
+  const lagSeconds = Math.max(0, Math.round((Date.now() * 1000 - cursor) / 1_000_000));
+  return { events, changes, cursor, lagSeconds, host, stoppedBy };
 }
 
 /**
@@ -338,14 +383,14 @@ async function deletePhotosOfDeletedPosts(): Promise<number> {
   for (const { did, rkey, postRkey } of matched) {
     try {
       const outcome = await deletePhotoAfterPost(did, rkey, postRkey);
-      if (outcome === "no_sign_in") console.warn("Hiding a photo whose Bluesky post was deleted", { did, rkey });
+      if (outcome === "no_sign_in") log.warn("Hiding a photo whose Bluesky post was deleted", { did, rkey });
       // Only the row for that post: a photo posted again at the key stays.
       await db
         .delete(photoIndex)
         .where(and(eq(photoIndex.did, did), eq(photoIndex.rkey, rkey), eq(photoIndex.postRkey, postRkey)));
       done++;
     } catch (err) {
-      console.warn("Couldn't delete a photo whose Bluesky post was deleted; trying again next run", { did, rkey, err });
+      log.warn("Couldn't delete a photo whose Bluesky post was deleted; trying again next run", { did, rkey, err });
     }
   }
   return done;
@@ -353,8 +398,15 @@ async function deletePhotosOfDeletedPosts(): Promise<number> {
 
 /** Members whose photos haven't been copied into the index yet, a few per tick. */
 const BACKFILLS_PER_TICK = 5;
+/**
+ * Members whose last backfill is older than this get one again, one per
+ * tick when no new members are waiting. A safety net for changes Jetstream
+ * missed, such as while the indexer was down longer than Jetstream keeps
+ * events.
+ */
+const REFRESH_AFTER_DAYS = 7;
 
-async function backfillPending(): Promise<number> {
+async function backfillPending(): Promise<{ backfilled: number; refreshed: number }> {
   const db = await getDb();
   // In random order, so members whose repos can't be read don't hold up the rest.
   const pending = await db
@@ -363,23 +415,38 @@ async function backfillPending(): Promise<number> {
     .where(isNull(member.backfilledAt))
     .orderBy(sql`random()`)
     .limit(BACKFILLS_PER_TICK);
-  let done = 0;
+  let backfilled = 0;
   for (const { did } of pending) {
-    if (await backfillMember(did).catch(() => false)) done++;
+    if (await backfillMember(did).catch(() => false)) backfilled++;
   }
-  return done;
+  let refreshed = 0;
+  if (pending.length < BACKFILLS_PER_TICK) {
+    const stale = await db
+      .select({ did: member.did })
+      .from(member)
+      .where(lt(member.backfilledAt, sql`now() - make_interval(days => ${REFRESH_AFTER_DAYS})`))
+      .orderBy(sql`random()`)
+      .limit(1);
+    for (const { did } of stale) {
+      if (await backfillMember(did).catch(() => false)) refreshed++;
+    }
+  }
+  return { backfilled, refreshed };
 }
 
 /**
  * One run of the indexer: Jetstream catch-up, then deleting photos whose
- * Bluesky posts were deleted, then a few pending member backfills. Returns
- * null if another instance is already running it.
+ * Bluesky posts were deleted, then a few pending member backfills (or one
+ * refresh of a member backfilled long ago). Returns null if another
+ * instance is already running it.
  */
-export async function indexTick(): Promise<{ catchUp: CatchUpResult; postDeletes: number; backfilled: number } | null> {
+export async function indexTick(): Promise<
+  { catchUp: CatchUpResult; postDeletes: number; backfilled: number; refreshed: number } | null
+> {
   return withTryLock("photo-index-tick", async () => {
     const result = await catchUp();
     const postDeletes = await deletePhotosOfDeletedPosts();
-    const backfilled = await backfillPending();
-    return { catchUp: result, postDeletes, backfilled };
+    const { backfilled, refreshed } = await backfillPending();
+    return { catchUp: result, postDeletes, backfilled, refreshed };
   });
 }

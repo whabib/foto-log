@@ -1,5 +1,6 @@
 import "server-only";
 import { TtlCache } from "@/lib/ttl-cache";
+import { log } from "@/lib/log";
 
 const APPVIEW = "https://public.api.bsky.app";
 
@@ -33,7 +34,7 @@ export async function blueskyProfile(did: string): Promise<BlueskyProfile> {
       return NONE; // don't cache server errors
     }
   } catch (err) {
-    console.warn("Couldn't fetch Bluesky profile", { did, err });
+    log.warn("Couldn't fetch Bluesky profile", { did, err });
     return NONE;
   }
   cache.set(did, profile);

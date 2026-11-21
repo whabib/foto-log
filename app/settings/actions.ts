@@ -7,6 +7,7 @@ import { type SettingsField, validateMemberSettings } from "@/lib/member-setting
 import { getMemberSettings, updateMemberSettings } from "@/lib/member-settings-server";
 import { approveRequest, leaveGroup, setGroup } from "@/lib/groups-server";
 import { checkName, memberName, type SetNameResult, setFotologName, setShowFotologName } from "@/lib/fotolog-name-server";
+import { log } from "@/lib/log";
 
 export type SaveState =
   | { status: "idle" }
@@ -46,7 +47,7 @@ export async function saveSettings(_prev: SaveState, form: FormData): Promise<Sa
       if (name) await setShowFotologName(user.did, primary === "fotolog");
     }
   } catch (err) {
-    console.error("Saving member settings failed", { did: user.did, err });
+    log.error("Saving member settings failed", { did: user.did, err });
     return { status: "error", errors: {}, message: "Something went wrong saving. Please try again." };
   }
   revalidatePath("/settings", "layout");
@@ -80,7 +81,7 @@ export async function claimFotologName(input: string): Promise<SetNameResult> {
     if (result.ok) revalidatePath("/settings");
     return result;
   } catch (err) {
-    console.error("Setting Fotolog name failed", { did: user.did, err });
+    log.error("Setting Fotolog name failed", { did: user.did, err });
     return { ok: false, message: "Something went wrong. Please try again." };
   }
 }
@@ -96,7 +97,7 @@ async function asGroupOwner(
   try {
     await fn(user.did);
   } catch (err) {
-    console.error(`${what} failed`, { did: user.did, err });
+    log.error(`${what} failed`, { did: user.did, err });
     return { ok: false, message: "Something went wrong. Please try again." };
   }
   revalidatePath("/settings", "layout");

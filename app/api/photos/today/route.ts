@@ -2,6 +2,7 @@ import { isValidDid } from "@atproto/syntax";
 import type { NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { PhotoError, todaysPhotoPath } from "@/lib/photos/server";
+import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     if (err instanceof PhotoError) {
       return Response.json({ error: err.message, code: err.code }, { status: err.code === "invalid" ? 400 : 403 });
     }
-    console.error("Checking today's photo failed", { did: user.did, err });
+    log.error("Checking today's photo failed", { did: user.did, err });
     return Response.json({ path: null });
   }
 }

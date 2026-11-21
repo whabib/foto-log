@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { eventTimeUs, identityChange, jetstreamUrl, photoChange, postDelete } from "./jetstream";
+import {
+  DEFAULT_JETSTREAM_URLS,
+  eventTimeUs,
+  identityChange,
+  jetstreamBases,
+  jetstreamUrl,
+  photoChange,
+  postDelete,
+} from "./jetstream";
 
 const did = "did:plc:abcdefghijklmnopqrstuvwx";
 
@@ -9,6 +17,15 @@ describe("jetstreamUrl", () => {
     expect(url.searchParams.getAll("wantedCollections")).toEqual(["com.foto-log.photo", "app.bsky.feed.post"]);
     expect(url.searchParams.get("cursor")).toBe("1700000000000000");
     expect(new URL(jetstreamUrl("wss://js.example/subscribe", null)).searchParams.has("cursor")).toBe(false);
+  });
+});
+
+describe("jetstreamBases", () => {
+  it("uses the defaults unless JETSTREAM_URL is set", () => {
+    expect(jetstreamBases(undefined)).toEqual(DEFAULT_JETSTREAM_URLS);
+    expect(jetstreamBases(" ")).toEqual(DEFAULT_JETSTREAM_URLS);
+    expect(jetstreamBases("wss://a/subscribe")).toEqual(["wss://a/subscribe"]);
+    expect(jetstreamBases("wss://a/subscribe, wss://b/subscribe")).toEqual(["wss://a/subscribe", "wss://b/subscribe"]);
   });
 });
 

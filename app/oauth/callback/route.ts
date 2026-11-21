@@ -14,6 +14,7 @@ import {
   LAST_TIER,
   startSignIn,
 } from "@/lib/oauth/client";
+import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     // Back after deleting their foto-log: their pages show again, and their name if it's still held.
     // Until this runs they count as signed out, so a failure fails the sign-in, to be tried again.
     await reopenAccount(session.did);
-    await rememberHandle(session.did, handle).catch((err) => console.warn("Couldn't record handle", { err }));
+    await rememberHandle(session.did, handle).catch((err) => log.warn("Couldn't record handle", { err }));
     await backfillOnSignIn(session.did);
     // New members get a word about customizing first.
     if (isNew) return redirectTo("/welcome");
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
       }
       if (error === "access_denied") return redirectTo("/login?error=denied");
     }
-    console.error("OAuth callback failed", err);
+    log.error("OAuth callback failed", { err });
     return redirectTo("/login?error=failed");
   }
 }

@@ -4,6 +4,7 @@ import { isValidDid, isValidHandle } from "@atproto/syntax";
 import { redirect } from "next/navigation";
 import { getCurrentUser, hasRoomForAccount, signOutOfBrowser } from "@/lib/auth";
 import { startSignIn } from "@/lib/oauth/client";
+import { log } from "@/lib/log";
 
 /** Bluesky's sign-in server, used when no handle is given. */
 const BLUESKY_ENTRYWAY = "https://bsky.social";
@@ -22,7 +23,7 @@ export async function signIn(formData: FormData) {
   try {
     url = await startSignIn(raw || BLUESKY_ENTRYWAY, 0, { selectAccount: adding });
   } catch (err) {
-    console.warn("Sign-in could not start", { input: raw, err });
+    log.warn("Sign-in could not start", { input: raw, err });
     redirect(`/login?error=${raw ? "resolve_failed" : "failed"}`);
   }
   redirect(url.toString());
@@ -41,7 +42,7 @@ export async function reauthorize() {
   try {
     url = await startSignIn(user.did);
   } catch (err) {
-    console.warn("Re-authorization could not start", { did: user.did, err });
+    log.warn("Re-authorization could not start", { did: user.did, err });
     redirect("/login?error=failed");
   }
   redirect(url.toString());

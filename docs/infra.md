@@ -8,7 +8,7 @@ Everything is in GCP project `foto-log-app` (billing: Pointless Enterprises), re
 |---|---|
 | Cloud Run service | `foto-log-web` (min 0 / max 3 instances, 512 MiB, ingress: load balancer only) |
 | Runtime service account | `foto-log-web@foto-log-app.iam.gserviceaccount.com`: `roles/cloudsql.client` on the project, plus `roles/secretmanager.secretAccessor` on the four secrets below only |
-| Artifact Registry (Docker) | `us-central1-docker.pkg.dev/foto-log-app/foto-log`, image `web` |
+| Artifact Registry (Docker) | `us-central1-docker.pkg.dev/foto-log-app/foto-log`, image `web`. Deploy, preview and scan images (`scan-*` tags) all go here. Cleanup policy (set by hand) keeps the 25 most recent versions, so a rollback target is always still there. |
 
 ### Cloud Run settings
 
@@ -53,7 +53,11 @@ All were generated directly into Secret Manager and never written to disk. Only 
 
 ## Photo index (Cloud Scheduler)
 
-The home page lists photos from the `photo_index` table. foto-log writes its own posts and deletes to it directly. Everything else arrives from Bluesky's Jetstream: every 3 minutes, Cloud Scheduler job `foto-log-index-tick` POSTs to `https://foto-log.com/api/index-tick` with `Authorization: Bearer <INDEX_TICK_SECRET>`. Each run reads Jetstream from the cursor saved in `app_state` until it catches up (at most 45 seconds). The stream also carries Bluesky posts, so members' post deletes are recorded in `deleted_post`; each run then deletes the photos that shared those posts, using the member's stored sign-in (without it, the photo is only kept out of the index). Then each run copies the photos of up to 5 members who haven't been backfilled yet. Overlapping runs skip. An always-on worker is #45.
+The home page lists photos from the `photo_index` table. foto-log writes its own posts and deletes to it directly. Everything else arrives from Bluesky's Jetstream: every 3 minutes, Cloud Scheduler job `foto-log-index-tick` POSTs to `https://foto-log.com/api/index-tick` with `Authorization: Bearer <INDEX_TICK_SECRET>`. Each run reads Jetstream from the cursor saved in `app_state` until it catches up (at most 45 seconds). The stream also carries Bluesky posts, so members' post deletes are recorded in `deleted_post`; each run then deletes the photos that shared those posts, using the member's stored sign-in (without it, the photo is only kept out of the index). Then each run copies the photos of up to 5 members who haven't been backfilled yet; when none are waiting, it backfills one member whose last backfill is over 7 days old again, as a safety net for anything Jetstream missed. Overlapping runs skip. An always-on worker is #45.
+
+Each run reads from `jetstream2.us-east.bsky.network` first. If that instance can't be reached or sends nothing, it tries `jetstream1.us-east`, then the two `us-west` instances, starting 10 seconds before the cursor. Every read starts 10 seconds early, since the saved cursor may come from another instance and instances' clocks differ slightly; replaying is harmless. `JETSTREAM_URL` overrides the list (one URL, or several separated by commas).
+
+Each run logs one `Index tick` entry with the event and change counts, the instance read (`catchUp.host`), why it stopped (`catchUp.stoppedBy`), and how far the cursor is behind real time (`catchUp.lagSeconds`). If the cursor is more than 15 minutes behind, the run logs an ERROR (`Index tick: the index is behind Jetstream`) and returns 500, so Cloud Scheduler records the attempt as failed. A Jetstream disconnect mid-run is logged as a WARNING and retried from the cursor on the next run.
 
 Cost: Cloud Scheduler's first 3 jobs per billing account are free, and the Cloud Run time is a few seconds every 3 minutes.
 
@@ -80,7 +84,7 @@ Check it with `gcloud scheduler jobs run foto-log-index-tick --project=foto-log-
 ## CI/CD
 
 - `.github/workflows/ci.yml`: on every PR, runs lint, typecheck and build.
-- `.github/workflows/deploy.yml`: on push to `main`, builds the image, tags it with the commit SHA, pushes it, deploys it to Cloud Run tagged `main`, and routes 100% of traffic to the new revision (`update-traffic --to-latest`).
+- `.github/workflows/deploy.yml`: on push to `main`, builds the image, tags it with the commit SHA, pushes it, deploys it to Cloud Run tagged `main`, and routes 100% of traffic to the new revision (`update-traffic --to-latest`). The deploy sets a startup probe on `/health` (every 2 seconds, up to 60 seconds), so a revision that can't reach the database never gets ready and never gets traffic. The probe is part of the service's config, so preview deploys and every cold start use it too. After traffic moves, the workflow checks `https://foto-log.com/health` for up to 90 seconds, until the new revision answers `ok` (`/health` reports the revision serving it, from `K_REVISION`); if it never does, it sends traffic back to the revision that was tagged `main` before the deploy, moves the `main` tag back to it, and fails.
 - `.github/workflows/preview.yml` (run by hand from the Actions tab, or `gh workflow run preview.yml -f pr=NN -f action=deploy`) tries a PR on the real domain before merging. `deploy` builds the PR's head and deploys it with `--no-traffic --tag=prNN`; `promote` sends 100% of traffic to that tag; `restore` sends traffic back to the revision tagged `main`, which `deploy.yml` moves to each revision it deploys from `main` (a preview deploy becomes Cloud Run's latest revision, so restoring to "latest" would serve the preview). `restore` doesn't look up the PR, so it works after the PR is closed. Only PRs from branches in this repository are deployed. The next merge to `main` also moves traffic back to the latest revision.
 - GitHub Actions authenticates with Workload Identity Federation, not JSON keys:
   - Pool `github`, provider `github`, restricted to repository ID `1406276002` (whabib/foto-log) and owner ID `779276`.
@@ -121,3 +125,59 @@ gcloud compute ssl-certificates describe foto-log-cert --global --project=foto-l
 ### Ingress
 
 Cloud Run ingress is `internal-and-cloud-load-balancing`, so public internet traffic must come through the load balancer; qualifying internal traffic can still reach the service directly. Direct public requests to the `*.run.app` URL return 404. The deploy workflow doesn't change this setting.
+
+## Logging
+
+The server logs through `lib/log.ts`. In production each entry is one line of JSON, which Cloud Logging reads as a structured entry: `severity` (INFO, WARNING, ERROR) sets the level, `message` is the summary, and every other field can be searched, for example `jsonPayload.did="did:plc:…"`. Errors are written out with their name, message, stack, cause and fields like `status`. An ERROR entry that carries an error also gets the stack in `stack_trace`, so Error Reporting groups it. Locally (`npm run dev`) it logs to the console as before. `LOG_FORMAT=json` or `LOG_FORMAT=pretty` overrides either.
+
+Useful Logs Explorer queries (resource `cloud_run_revision`, service `foto-log-web`):
+
+- Everything that went wrong: `severity>=WARNING`
+- Index runs: `jsonPayload.message=~"^Index tick"`
+- One member: `jsonPayload.did="did:plc:…"`
+
+## Monitoring and alerts
+
+Set up once, by hand. The alert policies are in `infra/monitoring/`. Run these from the repo root, signed in to gcloud as a project owner.
+
+```sh
+gcloud services enable monitoring.googleapis.com billingbudgets.googleapis.com --project=foto-log-app
+
+# Where alerts go: an email channel (the channels command is still in gcloud beta).
+gcloud beta monitoring channels create --project=foto-log-app \
+  --display-name="foto-log alerts" --type=email --channel-labels=email_address=YOU@example.com
+CHANNEL=$(gcloud beta monitoring channels list --project=foto-log-app \
+  --filter='displayName="foto-log alerts"' --format='value(name)')
+
+# Uptime check: GETs https://foto-log.com/health every 5 minutes from several regions
+# and expects "ok":true (it returns 503 when the database can't be reached).
+gcloud monitoring uptime create foto-log-health --project=foto-log-app \
+  --resource-type=uptime-url --resource-labels=host=foto-log.com,project_id=foto-log-app \
+  --protocol=https --path=/health --period=5 --timeout=10 \
+  --matcher-type=contains-string --matcher-content='"ok":true'
+
+# Alert policies: site down (2+ regions failing the uptime check), more than 10
+# 5xx responses in 5 minutes, and Cloud SQL CPU, memory or disk running high.
+for policy in uptime cloud-run-5xx cloud-sql; do
+  gcloud monitoring policies create --project=foto-log-app \
+    --policy-from-file="infra/monitoring/$policy.json" --notification-channels="$CHANNEL"
+done
+
+# Billing budget for this project, with emails at 50%, 90% and 100%, and at 100% of the forecast.
+# Needs Billing Account Administrator (or Costs Manager) on the billing account.
+# The amount is a starting point: today's run rate is roughly $30/month
+# (Cloud SQL about $10, the load balancer's forwarding rules about $18, Cloud Run a little).
+BILLING=$(gcloud billing projects describe foto-log-app --format='value(billingAccountName)' | sed 's|billingAccounts/||')
+gcloud billing budgets create --billing-account="$BILLING" \
+  --display-name="foto-log-app monthly" --budget-amount=50USD \
+  --filter-projects=projects/foto-log-app \
+  --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0 \
+  --threshold-rule=percent=1.0,basis=forecasted-spend \
+  --notifications-rule-monitoring-notification-channels="$CHANNEL"
+```
+
+Check them with `gcloud monitoring policies list --project=foto-log-app --format='table(displayName,enabled)'` and `gcloud monitoring uptime list-configs --project=foto-log-app`. To test an alert's email, use **Monitoring → Alerting → the policy → Send test notification** in the console.
+
+Uptime checks, alert policies and email notifications are free at this size. Budgets are free.
+
+Not set up yet: an alert on failed index runs. Once the structured logs above are deployed, a log-based alert on `jsonPayload.message="Index tick: the index is behind Jetstream" OR jsonPayload.message="Index tick failed"` (or on Cloud Scheduler's failed attempts for `foto-log-index-tick`) would cover it.

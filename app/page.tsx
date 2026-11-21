@@ -4,6 +4,7 @@ import { timeAgo } from "@/lib/friends";
 import { resolveActor } from "@/lib/identity";
 import { recentPhotos } from "@/lib/photo-index-server";
 import { displayName, memberPath, photoKeyPath, thumbnailUrl } from "@/lib/photos/urls";
+import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ async function loadCards(): Promise<Card[]> {
     const actors = await Promise.all(photos.map((p) => resolveActor(p.did)));
     return photos.map((p, i) => ({ ...p, handle: actors[i]?.handle ?? null }));
   } catch (err) {
-    console.error("Couldn't load recent photos", err);
+    log.error("Couldn't load recent photos", { err });
     return [];
   }
 }

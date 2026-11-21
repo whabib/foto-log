@@ -4,6 +4,7 @@ import { baseUrl } from "@/lib/config";
 import { PROFILE_IMAGE_FIELDS, type ProfileImageField } from "@/lib/member-profile";
 import { setMemberImage } from "@/lib/member-profile-server";
 import { PhotoError } from "@/lib/photos/server";
+import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
     if (err instanceof PhotoError) {
       return Response.json({ error: err.message, code: err.code }, { status: STATUS[err.code] });
     }
-    console.error("Saving a member image failed", { did: user.did, field, err });
+    log.error("Saving a member image failed", { did: user.did, field, err });
     return Response.json({ error: "Something went wrong saving that. Please try again." }, { status: 502 });
   }
   revalidatePath("/settings", "layout");

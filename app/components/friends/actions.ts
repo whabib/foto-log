@@ -3,6 +3,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { addFriend, removeFriend } from "@/lib/friends-server";
 import { PhotoError } from "@/lib/photos/server";
+import { log } from "@/lib/log";
 
 export type FriendState = { status: "done" } | { status: "error"; message: string; signIn?: boolean };
 
@@ -16,7 +17,7 @@ export async function setFriendAction(did: string, add: boolean): Promise<Friend
     if (err instanceof PhotoError) {
       return { status: "error", message: err.message, signIn: err.code === "session_expired" };
     }
-    console.error("Friends/Favorites change failed", { did: user.did, friend: did, add, err });
+    log.error("Friends/Favorites change failed", { did: user.did, friend: did, add, err });
     return { status: "error", message: "Something went wrong. Please try again." };
   }
   return { status: "done" };
