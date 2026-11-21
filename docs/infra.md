@@ -176,7 +176,7 @@ gcloud billing budgets create --billing-account="$BILLING" \
   --notifications-rule-monitoring-notification-channels="$CHANNEL"
 ```
 
-Check them with `gcloud monitoring policies list --project=foto-log-app --format='table(displayName,enabled)'` and `gcloud monitoring uptime list-configs --project=foto-log-app`. To test an alert's email, use **Monitoring → Alerting → the policy → Send test notification** in the console.
+Check them with `gcloud monitoring policies list --project=foto-log-app --format='table(displayName,enabled)'` and `gcloud monitoring uptime list-configs --project=foto-log-app`. To test the email channel, go to **Monitoring → Alerting → Edit notification channels** in the console and send a test notification from "foto-log alerts".
 
 Uptime checks, alert policies and email notifications are free at this size. Budgets are free.
 
