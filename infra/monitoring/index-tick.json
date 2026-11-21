@@ -1,0 +1,20 @@
+{
+  "displayName": "foto-log index runs are failing",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "An index run failed, fell behind, or Cloud Scheduler couldn't run it",
+      "conditionMatchedLog": {
+        "filter": "(resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"foto-log-web\" AND severity>=ERROR AND (jsonPayload.message=\"Index tick: the index is behind Jetstream\" OR jsonPayload.message=\"Index tick failed\")) OR (resource.type=\"cloud_scheduler_job\" AND resource.labels.job_id=\"foto-log-index-tick\" AND severity>=ERROR)"
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationRateLimit": { "period": "3600s" },
+    "autoClose": "1800s"
+  },
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "An index run (Cloud Scheduler job foto-log-index-tick, every 3 minutes) failed. Either it crashed (`Index tick failed`), the index is more than 15 minutes behind Jetstream (`Index tick: the index is behind Jetstream`), or Cloud Scheduler's attempt failed (a 401 means the job's token no longer matches INDEX_TICK_SECRET; a deadline error means a run took over 300 seconds). The log entry's `catchUp` field shows the Jetstream host, why the run stopped, and the lag. At most one email an hour. See docs/infra.md."
+  }
+}
