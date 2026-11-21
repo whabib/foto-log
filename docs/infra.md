@@ -75,8 +75,15 @@ gcloud run services update foto-log-web --project=foto-log-app --region=us-centr
 gcloud services enable cloudscheduler.googleapis.com --project=foto-log-app
 gcloud scheduler jobs create http foto-log-index-tick --project=foto-log-app --location=us-central1 \
   --schedule="*/3 * * * *" --uri=https://foto-log.com/api/index-tick --http-method=POST \
-  --attempt-deadline=120s \
+  --attempt-deadline=300s \
   --headers="Authorization=Bearer $(gcloud secrets versions access latest --secret=index-tick-secret --project=foto-log-app)"
+```
+
+The attempt deadline is 300 seconds, the same as Cloud Run's default request timeout. A run usually takes well under a minute, but one that also backfills several large repos can take longer, and a shorter deadline would record that as a failed attempt even though the run finished. To change it on the existing job:
+
+```sh
+gcloud scheduler jobs update http foto-log-index-tick --project=foto-log-app --location=us-central1 \
+  --attempt-deadline=300s
 ```
 
 Check it with `gcloud scheduler jobs run foto-log-index-tick --project=foto-log-app --location=us-central1` and the `Index tick` lines in the Cloud Run logs. The token is stored in the job's config, so anyone who can view Cloud Scheduler jobs in the project can read it; it only lets them run the indexer.
@@ -180,7 +187,7 @@ Check them with `gcloud monitoring policies list --project=foto-log-app --format
 
 Uptime checks, alert policies and email notifications are free at this size. Budgets are free.
 
-Failed index runs have their own alert, created separately because it matches log entries rather than a metric. It emails at most once an hour when an index run logs `Index tick failed` or `Index tick: the index is behind Jetstream`, or when Cloud Scheduler logs a failed attempt for `foto-log-index-tick` (a 500, a 401 from a token that no longer matches, or a run past the 120-second deadline):
+Failed index runs have their own alert, created separately because it matches log entries rather than a metric. It emails at most once an hour when an index run logs `Index tick failed` or `Index tick: the index is behind Jetstream`, or when Cloud Scheduler logs a failed attempt for `foto-log-index-tick` (a 500, a 401 from a token that no longer matches, or a run past the 300-second deadline):
 
 ```sh
 gcloud monitoring policies create --project=foto-log-app \

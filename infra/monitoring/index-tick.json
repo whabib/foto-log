@@ -15,6 +15,6 @@
   },
   "documentation": {
     "mimeType": "text/markdown",
-    "content": "An index run (Cloud Scheduler job foto-log-index-tick, every 3 minutes) failed. Either it crashed (`Index tick failed`), the index is more than 15 minutes behind Jetstream (`Index tick: the index is behind Jetstream`), or Cloud Scheduler's attempt failed (a 401 means the job's token no longer matches INDEX_TICK_SECRET; a deadline error means a run took over 120 seconds). The log entry's `catchUp` field shows the Jetstream host, why the run stopped, and the lag. At most one email an hour. See docs/infra.md."
+    "content": "An index run (Cloud Scheduler job foto-log-index-tick, every 3 minutes) failed. Either it crashed (`Index tick failed`), the index is more than 15 minutes behind Jetstream (`Index tick: the index is behind Jetstream`), or Cloud Scheduler's attempt failed (a 401 means the job's token no longer matches INDEX_TICK_SECRET; a deadline error means a run took over 300 seconds). The log entry's `catchUp` field shows the Jetstream host, why the run stopped, and the lag. At most one email an hour. See docs/infra.md."
   }
 }
