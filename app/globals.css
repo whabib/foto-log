@@ -694,9 +694,20 @@ a {
   color: var(--m-fg);
 }
 
+/*
+ * A fotolog's pages use three type sizes: 16px bold for headings, 14px for
+ * text, 12px for dates and small links. No faded text, and links are underlined.
+ */
+.member-theme {
+  --m-text-lg: 1rem;
+  --m-text-md: 0.875rem;
+  --m-text-sm: 0.75rem;
+}
+
 .member-theme a,
 .member-theme .link-button {
   color: var(--m-link);
+  text-decoration: underline;
 }
 
 .member-theme a:hover,
@@ -841,12 +852,8 @@ body:has(.member-theme) .account-menu li button:hover {
 
 .member-name {
   margin: 0 0 8px;
-  font-size: 1.0625rem;
+  font-size: var(--m-text-lg);
   overflow-wrap: anywhere;
-}
-
-.member-name a {
-  text-decoration: none;
 }
 
 .about-me {
@@ -870,7 +877,7 @@ body:has(.member-theme) .account-menu li button:hover {
 
 .location {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--m-text-md);
   overflow-wrap: anywhere;
 }
 
@@ -878,22 +885,13 @@ body:has(.member-theme) .account-menu li button:hover {
   margin: 0 0 10px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--m-rule);
-  font-size: 0.9375rem;
-}
-
-.rail-heading a {
-  text-decoration: none;
-}
-
-.rail-heading a:hover {
-  text-decoration: underline;
+  font-size: var(--m-text-lg);
 }
 
 .rail-empty,
 .rail-more {
   margin: 0 0 20px;
-  font-size: 0.875rem;
-  opacity: 0.8;
+  font-size: var(--m-text-md);
 }
 
 /* A few lines below the link above it. */
@@ -912,7 +910,6 @@ body:has(.member-theme) .account-menu li button:hover {
 
 .recent-photos a {
   display: block;
-  text-decoration: none;
 }
 
 .recent-photos img {
@@ -930,8 +927,7 @@ body:has(.member-theme) .account-menu li button:hover {
 .recent-photos .date {
   display: block;
   margin-top: 2px;
-  font-size: 0.8125rem;
-  text-align: center;
+  font-size: var(--m-text-sm);
 }
 
 .photo-nav {
@@ -962,7 +958,7 @@ body:has(.member-theme) .account-menu li button:hover {
   align-items: baseline;
   gap: 4px 16px;
   margin: 8px 0 16px;
-  font-size: 0.875rem;
+  font-size: var(--m-text-sm);
 }
 
 .photo-util p {
@@ -975,27 +971,22 @@ body:has(.member-theme) .account-menu li button:hover {
   margin-left: auto;
 }
 
+.photo-date {
+  margin: 0 0 4px;
+  font-size: var(--m-text-sm);
+}
+
 .photo-text .caption {
   margin: 0 0 4px;
-  font-size: 1.125rem;
+  font-size: var(--m-text-md);
   font-weight: normal;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.photo-date,
-.uploaded {
-  margin: 0 0 4px;
-  font-size: 0.9375rem;
-}
-
-.uploaded {
-  opacity: 0.8;
-}
-
 .friend-toggle {
   margin: -8px 0 16px;
-  font-size: 0.875rem;
+  font-size: var(--m-text-sm);
 }
 
 /* The same size as the Recent Photos thumbnails, which fill the 150px left column. */
@@ -1009,7 +1000,7 @@ body:has(.member-theme) .account-menu li button:hover {
 }
 
 .friend-cards li {
-  font-size: 0.8125rem;
+  font-size: var(--m-text-sm);
   overflow-wrap: anywhere;
 }
 
@@ -1020,15 +1011,8 @@ body:has(.member-theme) .account-menu li button:hover {
   object-fit: cover;
 }
 
-.friend-cards .friend-when {
-  display: block;
-  margin-top: 2px;
-  opacity: 0.75;
-}
-
-.friend-cards .friend-name {
-  display: block;
-  font-weight: 600;
+.friend-cards .friend-caption {
+  margin: 2px 0 0;
 }
 
 .friends-page {
@@ -1213,19 +1197,12 @@ body:has(.member-theme) .account-menu li button:hover {
 
 .entry .byline {
   margin: 0 0 4px;
-  font-size: 0.875rem;
-}
-
-.entry .byline a {
-  font-weight: 600;
-}
-
-.entry .said {
-  opacity: 0.8;
+  font-size: var(--m-text-sm);
 }
 
 .entry-text {
   margin: 0;
+  font-size: var(--m-text-md);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -1235,10 +1212,7 @@ body:has(.member-theme) .account-menu li button:hover {
   flex-direction: column;
   gap: 6px;
   margin-top: 16px;
-}
-
-.guestbook-form label {
-  font-weight: 600;
+  font-size: var(--m-text-md);
 }
 
 .guestbook-form textarea {
@@ -1259,12 +1233,11 @@ body:has(.member-theme) .account-menu li button:hover {
 
 .guestbook-form-row .counter {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--m-text-sm);
 }
 
 .guestbook-form button {
   font: inherit;
-  font-weight: 600;
   padding: 8px 16px;
   border: 1px solid var(--m-link);
   border-radius: 6px;
@@ -1281,7 +1254,7 @@ body:has(.member-theme) .account-menu li button:hover {
 .member-theme .guestbook-form .hint {
   margin: 0;
   color: inherit;
-  opacity: 0.75;
+  font-size: var(--m-text-sm);
 }
 
 .no-photos {
@@ -1504,7 +1477,7 @@ body:has(.member-theme) .account-menu li button:hover {
 }
 
 .entry-hide {
-  font-size: 0.75rem;
+  font-size: var(--m-text-sm);
   margin-left: 4px;
 }
 
@@ -1531,8 +1504,7 @@ body:has(.member-theme) .account-menu li button:hover {
   gap: 6px;
   margin: 0 0 0 auto;
   white-space: nowrap;
-  font-size: 0.75rem;
-  opacity: 0.9;
+  font-size: var(--m-text-sm);
 }
 
 .gear {
@@ -2000,7 +1972,7 @@ body:has(.member-theme) .account-menu li button:hover {
 
 .group-box {
   margin: 0.75rem 0 1rem;
-  font-size: 0.85rem;
+  font-size: var(--m-text-md, 0.875rem);
 }
 
 .group-box .group-kind {
