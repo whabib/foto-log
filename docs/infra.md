@@ -8,7 +8,18 @@ Everything is in GCP project `foto-log-app` (billing: Pointless Enterprises), re
 |---|---|
 | Cloud Run service | `foto-log-web` (min 0 / max 3 instances, 512 MiB, ingress: load balancer only) |
 | Runtime service account | `foto-log-web@foto-log-app.iam.gserviceaccount.com`: `roles/cloudsql.client` on the project, plus `roles/secretmanager.secretAccessor` on the four secrets below only |
-| Artifact Registry (Docker) | `us-central1-docker.pkg.dev/foto-log-app/foto-log`, image `web`. Deploy, preview and scan images (`scan-*` tags) all go here. Cleanup policy (set by hand) keeps the 25 most recent versions, so a rollback target is always still there. |
+| Artifact Registry (Docker) | `us-central1-docker.pkg.dev/foto-log-app/foto-log`, image `web`. Deploy, preview and scan images (`scan-*` tags) all go here. Cleanup policies (set by hand, see below) delete versions older than a day except the 25 most recent, so a rollback target is always still there. |
+
+### Artifact Registry cleanup
+
+The policies are in `infra/artifact-registry/cleanup-policy.json`: a Delete rule for any version (tagged or not) older than 1 day, and a Keep rule for the 25 most recent versions. Keep wins over Delete. A Keep rule by itself deletes nothing, so both are needed. Until Nov 2026 only the Keep rule was set, and the repo grew to about 390 versions. Cleanup runs about once a day. To apply or change them:
+
+```sh
+gcloud artifacts repositories set-cleanup-policies foto-log --project=foto-log-app --location=us-central1 \
+  --policy=infra/artifact-registry/cleanup-policy.json --no-dry-run
+```
+
+Check with `gcloud artifacts repositories describe foto-log --project=foto-log-app --location=us-central1 --format='yaml(cleanupPolicies,cleanupPolicyDryRun)'` and count versions with `gcloud artifacts docker images list us-central1-docker.pkg.dev/foto-log-app/foto-log --format='value(version)' | wc -l`.
 
 ### Cloud Run settings
 

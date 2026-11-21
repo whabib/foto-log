@@ -1,0 +1,12 @@
+[
+  {
+    "name": "delete-old",
+    "action": {"type": "Delete"},
+    "condition": {"tagState": "any", "olderThan": "1d"}
+  },
+  {
+    "name": "Fotolog container cleanups",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {"keepCount": 25}
+  }
+]
