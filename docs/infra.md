@@ -180,4 +180,11 @@ Check them with `gcloud monitoring policies list --project=foto-log-app --format
 
 Uptime checks, alert policies and email notifications are free at this size. Budgets are free.
 
-Not set up yet: an alert on failed index runs. Once the structured logs above are deployed, a log-based alert on `jsonPayload.message="Index tick: the index is behind Jetstream" OR jsonPayload.message="Index tick failed"` (or on Cloud Scheduler's failed attempts for `foto-log-index-tick`) would cover it.
+Failed index runs have their own alert, created separately because it matches log entries rather than a metric. It emails at most once an hour when an index run logs `Index tick failed` or `Index tick: the index is behind Jetstream`, or when Cloud Scheduler logs a failed attempt for `foto-log-index-tick` (a 500, a 401 from a token that no longer matches, or a run past the 120-second deadline):
+
+```sh
+gcloud monitoring policies create --project=foto-log-app \
+  --policy-from-file=infra/monitoring/index-tick.json --notification-channels="$CHANNEL"
+```
+
+In a new shell, set `CHANNEL` again first with the `gcloud beta monitoring channels list` command above.
