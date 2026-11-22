@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { type CSSProperties, type ReactNode, Suspense } from "react";
-import LocalTime from "@/app/components/LocalTime";
 import FriendButton from "@/app/components/friends/FriendButton";
 import FriendsColumn from "@/app/components/friends/FriendsColumn";
 import GroupBox from "@/app/components/groups/GroupBox";
@@ -12,6 +11,7 @@ import type { GroupInfo } from "@/lib/member-page-data";
 import type { Member } from "@/lib/member-resolve-server";
 import { isHexColor, type MemberPageLook } from "@/lib/member-settings";
 import type { StoredPhoto } from "@/lib/photos/server";
+import { formatPhotoTime } from "@/lib/photo-time";
 import type { MemberImages } from "@/lib/member-profile";
 import {
   blueskyPostUrl,
@@ -36,8 +36,8 @@ export function formatDay(date: string) {
   });
 }
 
-/** Short calendar date, e.g. "Oct 14, 2026": the photo's date line and its thumbnail. */
-export function formatShortDay(date: string) {
+/** Short calendar date for thumbnails, e.g. "Oct 14, 2026". */
+function formatShortDay(date: string) {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -335,10 +335,9 @@ function CenterPhoto({
       </div>
 
       <div className="photo-text">
-        {/* The photo's day, then its upload time in the viewer's zone: "Nov 17, 2026, 11:57 AM". */}
+        {/* When it was posted, in the poster's time zone: "Nov 17, 2026, 11:57 AM ET". */}
         <p className="photo-date">
-          <time dateTime={record.displayDate}>{formatShortDay(record.displayDate)}</time>
-          <LocalTime iso={record.createdAt} format="time" lead=", " />
+          <time dateTime={record.createdAt}>{formatPhotoTime(record.createdAt, record.timeZone)}</time>
           {uploader && (
             <>
               {" by "}

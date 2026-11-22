@@ -9,28 +9,12 @@ const FORMATS: Record<"datetime" | "time", Intl.DateTimeFormatOptions> = {
   time: { timeStyle: "short" },
 };
 
-/**
- * An instant shown in the viewer's own time zone. Empty during server
- * rendering, and so is `lead`, text such as ", " that goes before it.
- */
-export default function LocalTime({
-  iso,
-  format = "datetime",
-  lead = "",
-}: {
-  iso: string;
-  format?: "datetime" | "time";
-  lead?: string;
-}) {
+/** An instant shown in the viewer's own time zone. Empty during server rendering. */
+export default function LocalTime({ iso, format = "datetime" }: { iso: string; format?: "datetime" | "time" }) {
   const text = useSyncExternalStore(
     noop,
     () => new Date(iso).toLocaleString(undefined, FORMATS[format]),
     () => "",
   );
-  return (
-    <>
-      {text && lead}
-      <time dateTime={iso}>{text}</time>
-    </>
-  );
+  return <time dateTime={iso}>{text}</time>;
 }
