@@ -147,7 +147,12 @@ export default function MemberPage(props: MemberPageProps) {
               <ul className="recent-photos">
                 {recent.map((p) => (
                   <li key={p.rkey} className={p.rkey === photo?.rkey ? "selected" : undefined}>
-                    <Link href={storedPhotoPath(owner, p)} aria-current={p.rkey === photo?.rkey ? "page" : undefined}>
+                    {/* The date is outside the link, so a photo without alt text needs a label for screen readers. */}
+                    <Link
+                      href={storedPhotoPath(owner, p)}
+                      aria-current={p.rkey === photo?.rkey ? "page" : undefined}
+                      aria-label={p.record.alt ? undefined : `Photo from ${formatShortDay(p.record.displayDate)}`}
+                    >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={thumbnailUrl(owner.did, p.record.image.ref.toString())} alt={p.record.alt ?? ""} loading="lazy" />
                     </Link>
