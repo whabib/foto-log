@@ -6,6 +6,7 @@ import FriendsColumn from "@/app/components/friends/FriendsColumn";
 import GroupBox from "@/app/components/groups/GroupBox";
 import GroupsColumn from "@/app/components/groups/GroupsColumn";
 import Guestbook from "@/app/components/guestbook/Guestbook";
+import ViewBeacon from "@/app/components/ViewBeacon";
 import { EMPTY_GUESTBOOK, type Guestbook as GuestbookData } from "@/lib/guestbook/entries";
 import DeleteButton from "@/app/[actor]/[date]/DeleteButton";
 import type { GroupInfo } from "@/lib/member-page-data";
@@ -79,6 +80,8 @@ export type MemberPageProps = {
   group?: GroupInfo | null;
   /** On a group, the member who posted the center photo. */
   uploader?: MemberRef | null;
+  /** The token that counts a view of the center photo; null when the viewer is its owner. */
+  viewToken?: string | null;
 };
 
 export default function MemberPage(props: MemberPageProps) {
@@ -278,12 +281,14 @@ function CenterPhoto({
   onViewerList,
   canAdd,
   uploader,
+  viewToken,
 }: MemberPageProps & { photo: StoredPhoto }) {
   const { record } = photo;
   const bskyUrl = blueskyPostUrl(record.post.uri);
   const permalink = storedPhotoPath(owner, photo);
   return (
     <>
+      {viewToken && <ViewBeacon key={viewToken} photo={`${owner.did}/${photo.rkey}`} token={viewToken} />}
       <nav className="photo-nav" aria-label="Photos">
         {older ? (
           <Link href={storedPhotoPath(owner, older)} rel="prev" aria-label="Previous photo">

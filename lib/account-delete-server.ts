@@ -14,6 +14,7 @@ import {
   memberSettings,
   oauthSession,
   photoIndex,
+  photoView,
   siteAdmin,
   userSession,
 } from "@/lib/db/schema";
@@ -96,6 +97,7 @@ export async function forgetMember(did: string): Promise<void> {
     await tx.delete(userSession).where(eq(userSession.did, did));
     await tx.delete(memberSettings).where(eq(memberSettings.did, did));
     await tx.delete(photoIndex).where(eq(photoIndex.did, did));
+    await tx.delete(photoView).where(eq(photoView.memberDid, did));
     await tx.delete(groupMember).where(eq(groupMember.memberDid, did));
     // A group account: the group ends, and its members (cascade) and post credits go with it.
     await tx.delete(fotologGroup).where(eq(fotologGroup.did, did));

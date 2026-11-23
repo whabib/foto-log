@@ -2070,3 +2070,10 @@ body:has(.member-theme) .account-menu li button:hover {
   background: #b3261e;
   color: #fff;
 }
+
+.admin-page .report-thumb {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+}

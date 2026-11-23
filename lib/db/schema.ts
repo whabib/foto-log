@@ -214,3 +214,24 @@ export const closedMember = pgTable("closed_member", {
   fotologName: text("fotolog_name"),
   closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("closed_member_name_idx").on(t.fotologName)]);
+
+/**
+ * How many times each photo was viewed, by the hour. One row per photo per
+ * hour that had views; `member_did` is the photo's owner, and nothing about
+ * the viewer is stored. Rows for photos that leave photo_index are pruned.
+ */
+export const photoView = pgTable(
+  "photo_view",
+  {
+    memberDid: text("member_did").notNull(),
+    photoRkey: text("photo_rkey").notNull(),
+    /** The start of the hour the views happened in. */
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    impressions: integer("impressions").notNull().default(1),
+  },
+  (t) => [
+    primaryKey({ columns: [t.memberDid, t.photoRkey, t.createdAt] }),
+    index("photo_view_created_at_idx").on(t.createdAt),
+    index("photo_view_member_created_at_idx").on(t.memberDid, t.createdAt),
+  ],
+);
