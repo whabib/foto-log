@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgTable, primaryKey, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, index, integer, pgTable, primaryKey, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 /** In-progress OAuth authorizations. Values are encrypted; rows expire after an hour. */
 export const oauthState = pgTable(
@@ -218,7 +218,8 @@ export const closedMember = pgTable("closed_member", {
 /**
  * How many times each photo was viewed, by the hour. One row per photo per
  * hour that had views; `member_did` is the photo's owner, and nothing about
- * the viewer is stored. Rows for photos that leave photo_index are pruned.
+ * the viewer is stored. Rows go with their photo_index row, so a photo
+ * deleted and posted again under the same key starts from zero.
  */
 export const photoView = pgTable(
   "photo_view",
@@ -231,6 +232,11 @@ export const photoView = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.memberDid, t.photoRkey, t.createdAt] }),
+    foreignKey({
+      name: "photo_view_photo_fk",
+      columns: [t.memberDid, t.photoRkey],
+      foreignColumns: [photoIndex.did, photoIndex.rkey],
+    }).onDelete("cascade"),
     index("photo_view_created_at_idx").on(t.createdAt),
     index("photo_view_member_created_at_idx").on(t.memberDid, t.createdAt),
   ],

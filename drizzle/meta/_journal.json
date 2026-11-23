@@ -124,15 +124,8 @@
     {
       "idx": 17,
       "version": "7",
-      "when": 1795395589991,
+      "when": 1795397564699,
       "tag": "0017_photo_view",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "7",
-      "when": 1795396980582,
-      "tag": "0018_view_token",
       "breakpoints": true
     }
   ]

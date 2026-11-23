@@ -14,7 +14,7 @@ import {
 } from "@/lib/jetstream";
 import { assertValidPhotoRecord, type PhotoRecord } from "@/lib/photo-record";
 import { deletePhotoAfterPost, scanPhotos } from "@/lib/photos/server";
-import { pruneViews, pruneViewTokens } from "@/lib/views-server";
+import { pruneViewTokens } from "@/lib/views-server";
 import { log } from "@/lib/log";
 
 const CURSOR_KEY = "jetstream_cursor";
@@ -442,15 +442,13 @@ async function backfillPending(): Promise<{ backfilled: number; refreshed: numbe
  * instance is already running it.
  */
 export async function indexTick(): Promise<
-  { catchUp: CatchUpResult; postDeletes: number; backfilled: number; refreshed: number; prunedViews: number } | null
+  { catchUp: CatchUpResult; postDeletes: number; backfilled: number; refreshed: number } | null
 > {
   return withTryLock("photo-index-tick", async () => {
     const result = await catchUp();
     const postDeletes = await deletePhotosOfDeletedPosts();
     const { backfilled, refreshed } = await backfillPending();
-    // Views of photos that left the index, by any path (deletes, backfill, deleted posts).
-    const prunedViews = await pruneViews();
     await pruneViewTokens();
-    return { catchUp: result, postDeletes, backfilled, refreshed, prunedViews };
+    return { catchUp: result, postDeletes, backfilled, refreshed };
   });
 }

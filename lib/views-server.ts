@@ -58,17 +58,6 @@ export async function pruneViewTokens(): Promise<number> {
   return result.rowCount ?? 0;
 }
 
-/** Deletes view rows for photos no longer in the index (deleted photos, closed accounts). */
-export async function pruneViews(): Promise<number> {
-  const db = await getDb();
-  const result = await db.execute(sql`
-    DELETE FROM ${photoView} v
-    WHERE NOT EXISTS (
-      SELECT 1 FROM ${photoIndex} p WHERE p.did = v.member_did AND p.rkey = v.photo_rkey
-    )`);
-  return result.rowCount ?? 0;
-}
-
 /** How many rows each admin report shows. */
 export const REPORT_ROWS = 50;
 

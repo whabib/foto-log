@@ -1,5 +1,5 @@
 {
-  "id": "e2ad5941-aa2e-444e-a111-8cac9f87562a",
+  "id": "fb3b474a-6128-44fb-b4b5-cd7d04861a17",
   "prevId": "92203515-3be3-4fc1-9a5c-ace175a5be55",
   "version": "7",
   "dialect": "postgresql",
@@ -802,7 +802,23 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "photo_view_photo_fk": {
+          "name": "photo_view_photo_fk",
+          "tableFrom": "photo_view",
+          "tableTo": "photo_index",
+          "columnsFrom": [
+            "member_did",
+            "photo_rkey"
+          ],
+          "columnsTo": [
+            "did",
+            "rkey"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {
         "photo_view_member_did_photo_rkey_created_at_pk": {
           "name": "photo_view_member_did_photo_rkey_created_at_pk",
@@ -920,6 +936,47 @@
           "columns": [
             {
               "expression": "browser_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.view_token": {
+      "name": "view_token",
+      "schema": "",
+      "columns": {
+        "nonce": {
+          "name": "nonce",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "view_token_expires_at_idx": {
+          "name": "view_token_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

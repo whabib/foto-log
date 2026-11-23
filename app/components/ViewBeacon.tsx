@@ -22,14 +22,18 @@ export default function ViewBeacon({ photo, token }: { photo: string; token: str
     let sent = false;
     const send = () => {
       sent = true;
-      try {
-        sessionStorage.setItem(key, "1");
-      } catch {
-        // See above.
-      }
-      void fetch("/api/views", { method: "POST", body: token, keepalive: true, credentials: "same-origin" }).catch(
-        () => {},
-      );
+      // Marked as counted only once the server has the view, so a failed send
+      // (offline, say) is tried again with a fresh token on the next visit.
+      fetch("/api/views", { method: "POST", body: token, keepalive: true, credentials: "same-origin" })
+        .then((res) => {
+          if (!res.ok) return;
+          try {
+            sessionStorage.setItem(key, "1");
+          } catch {
+            // See above.
+          }
+        })
+        .catch(() => {});
     };
     const start = () => {
       if (sent || timer || document.visibilityState !== "visible") return;
