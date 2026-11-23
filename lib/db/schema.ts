@@ -235,3 +235,17 @@ export const photoView = pgTable(
     index("photo_view_member_created_at_idx").on(t.memberDid, t.createdAt),
   ],
 );
+
+/**
+ * View tokens that have been used, so each counts once across every server
+ * instance. Rows past `expires_at` can't count anyway (the token is too old)
+ * and are deleted by the index tick.
+ */
+export const viewToken = pgTable(
+  "view_token",
+  {
+    nonce: text("nonce").primaryKey(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("view_token_expires_at_idx").on(t.expiresAt)],
+);

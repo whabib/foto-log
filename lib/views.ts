@@ -2,7 +2,7 @@ import { isValidDid, isValidRecordKey } from "@atproto/syntax";
 
 /**
  * Photo view counting, the parts that need no server: the view token's
- * format, its timing, the hour bucket, and single use.
+ * format, its timing, and the hour bucket.
  *
  * A photo page renders a signed, single-use token naming the photo. The
  * browser sends it back once the page has been open a moment, and the
@@ -45,33 +45,4 @@ export function tokenTiming(issuedAt: number, now: number): "early" | "expired" 
 /** The start of the UTC hour `ms` falls in. */
 export function hourBucket(ms: number): Date {
   return new Date(Math.floor(ms / 3_600_000) * 3_600_000);
-}
-
-/**
- * Remembers used tokens in memory, per server instance, so each counts
- * once. Nothing here is stored. With several instances each keeps its own
- * memory, so a replayed token can count at most once per instance. When
- * the memory is full of tokens that are still valid, new tokens are turned
- * away rather than forgetting a valid one, which would let it count again.
- */
-export class UsedTokens {
-  private used = new Map<string, number>();
-
-  constructor(private readonly maxEntries = 50_000) {}
-
-  /** Marks the token used; false if it already was, or if there's no room to remember it. */
-  claim(claim: ViewClaim, now: number): boolean {
-    if (this.used.has(claim.nonce)) return false;
-    if (this.used.size >= this.maxEntries) {
-      // Expired tokens can't count anyway, so they're safe to forget.
-      for (const [k, expires] of this.used) if (expires < now) this.used.delete(k);
-      if (this.used.size >= this.maxEntries) return false;
-    }
-    this.used.set(claim.nonce, claim.issuedAt + VIEW_TOKEN_TTL_MS);
-    return true;
-  }
-
-  get size(): number {
-    return this.used.size;
-  }
 }

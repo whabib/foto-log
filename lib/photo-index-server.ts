@@ -14,7 +14,7 @@ import {
 } from "@/lib/jetstream";
 import { assertValidPhotoRecord, type PhotoRecord } from "@/lib/photo-record";
 import { deletePhotoAfterPost, scanPhotos } from "@/lib/photos/server";
-import { pruneViews } from "@/lib/views-server";
+import { pruneViews, pruneViewTokens } from "@/lib/views-server";
 import { log } from "@/lib/log";
 
 const CURSOR_KEY = "jetstream_cursor";
@@ -450,6 +450,7 @@ export async function indexTick(): Promise<
     const { backfilled, refreshed } = await backfillPending();
     // Views of photos that left the index, by any path (deletes, backfill, deleted posts).
     const prunedViews = await pruneViews();
+    await pruneViewTokens();
     return { catchUp: result, postDeletes, backfilled, refreshed, prunedViews };
   });
 }

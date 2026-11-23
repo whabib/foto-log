@@ -3,7 +3,6 @@ import {
   hourBucket,
   parseViewPayload,
   tokenTiming,
-  UsedTokens,
   VIEW_MIN_DELAY_MS,
   VIEW_TOKEN_TTL_MS,
   viewPayload,
@@ -41,30 +40,5 @@ describe("tokenTiming", () => {
 describe("hourBucket", () => {
   it("floors to the UTC hour", () => {
     expect(hourBucket(Date.parse("2026-11-22T06:59:59.999Z")).toISOString()).toBe("2026-11-22T06:00:00.000Z");
-  });
-});
-
-describe("UsedTokens", () => {
-  it("counts a token only once", () => {
-    const used = new UsedTokens();
-    expect(used.claim(claim("a"), 5_000)).toBe(true);
-    expect(used.claim(claim("a"), 6_000)).toBe(false);
-    expect(used.claim(claim("b"), 6_000)).toBe(true);
-  });
-
-  it("turns new tokens away when full of valid ones, and keeps blocking used ones", () => {
-    const used = new UsedTokens(10);
-    for (let i = 0; i < 10; i++) expect(used.claim(claim(`n${i}`), 5_000)).toBe(true);
-    expect(used.claim(claim("overflow"), 5_000)).toBe(false);
-    expect(used.size).toBe(10);
-    for (let i = 0; i < 10; i++) expect(used.claim(claim(`n${i}`), 5_000)).toBe(false);
-  });
-
-  it("forgets expired tokens to make room", () => {
-    const used = new UsedTokens(10);
-    for (let i = 0; i < 10; i++) used.claim(claim(`n${i}`), 5_000);
-    const later = 1_000 + VIEW_TOKEN_TTL_MS + 1;
-    expect(used.claim(claim("fresh", "2026-11-22-01", later - 5_000), later)).toBe(true);
-    expect(used.size).toBe(1);
   });
 });

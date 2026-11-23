@@ -1,11 +1,9 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { bannedMember, member, photoIndex, photoView } from "@/lib/db/schema";
+import { bannedMember, member, photoIndex, photoView, viewToken } from "@/lib/db/schema";
 import { randomId, sign, unsign } from "@/lib/crypto";
-import { hourBucket, parseViewPayload, tokenTiming, UsedTokens, type ViewClaim, viewPayload } from "@/lib/views";
-
-const usedTokens = new UsedTokens();
+import { hourBucket, parseViewPayload, tokenTiming, type ViewClaim, VIEW_TOKEN_TTL_MS, viewPayload } from "@/lib/views";
 
 /** A signed, single-use token the photo page sends back to count one view of the photo. */
 export function issueViewToken(did: string, rkey: string, now = Date.now()): string {
@@ -24,21 +22,40 @@ export async function recordView(token: string, now = Date.now()): Promise<ViewR
   if (!claim) return "invalid";
   const timing = tokenTiming(claim.issuedAt, now);
   if (timing) return timing;
-  if (!usedTokens.claim(claim, now)) return "reused";
   const db = await getDb();
   const bucket = hourBucket(now);
-  // Only photos foto-log knows of; a deleted photo's page can't keep counting.
-  // The index row is locked, so this can't interleave with deleting the photo
-  // or the account: either the delete waits for this count and then removes
-  // it, or this sees the photo is gone.
-  const result = await db.execute(sql`
-    INSERT INTO ${photoView} (member_did, photo_rkey, created_at, impressions)
-    SELECT ${claim.did}, ${claim.rkey}, ${bucket}, 1
-    WHERE EXISTS (
-      SELECT 1 FROM ${photoIndex} WHERE ${photoIndex.did} = ${claim.did} AND ${photoIndex.rkey} = ${claim.rkey} FOR SHARE
+  const expiresAt = new Date(claim.issuedAt + VIEW_TOKEN_TTL_MS);
+  // One statement: claim the token (shared by every instance, so it counts
+  // once), then count the view only if the claim was new and the photo is in
+  // the index. The index row is locked, so this can't interleave with
+  // deleting the photo or the account: either the delete waits for this
+  // count and then removes it, or this sees the photo is gone.
+  const { rows } = await db.execute<{ claimed: number; counted: number }>(sql`
+    WITH claimed AS (
+      INSERT INTO ${viewToken} (nonce, expires_at) VALUES (${claim.nonce}, ${expiresAt})
+      ON CONFLICT (nonce) DO NOTHING
+      RETURNING 1
+    ), counted AS (
+      INSERT INTO ${photoView} (member_did, photo_rkey, created_at, impressions)
+      SELECT ${claim.did}, ${claim.rkey}, ${bucket}, 1
+      WHERE EXISTS (SELECT 1 FROM claimed)
+        AND EXISTS (
+          SELECT 1 FROM ${photoIndex} WHERE ${photoIndex.did} = ${claim.did} AND ${photoIndex.rkey} = ${claim.rkey} FOR SHARE
+        )
+      ON CONFLICT (member_did, photo_rkey, created_at) DO UPDATE SET impressions = ${photoView.impressions} + 1
+      RETURNING 1
     )
-    ON CONFLICT (member_did, photo_rkey, created_at) DO UPDATE SET impressions = ${photoView.impressions} + 1`);
-  return (result.rowCount ?? 0) > 0 ? "counted" : "unknown";
+    SELECT (SELECT count(*) FROM claimed)::int AS claimed, (SELECT count(*) FROM counted)::int AS counted`);
+  const [{ claimed, counted }] = rows;
+  if (!claimed) return "reused";
+  return counted ? "counted" : "unknown";
+}
+
+/** Deletes used view tokens that have expired; they couldn't count again anyway. */
+export async function pruneViewTokens(): Promise<number> {
+  const db = await getDb();
+  const result = await db.execute(sql`DELETE FROM ${viewToken} WHERE ${viewToken.expiresAt} < now()`);
+  return result.rowCount ?? 0;
 }
 
 /** Deletes view rows for photos no longer in the index (deleted photos, closed accounts). */
