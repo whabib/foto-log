@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { type CSSProperties, type ReactNode, Suspense } from "react";
-import LocalTime from "@/app/components/LocalTime";
 import FriendButton from "@/app/components/friends/FriendButton";
 import FriendsColumn from "@/app/components/friends/FriendsColumn";
 import GroupBox from "@/app/components/groups/GroupBox";
@@ -12,6 +11,7 @@ import type { GroupInfo } from "@/lib/member-page-data";
 import type { Member } from "@/lib/member-resolve-server";
 import { isHexColor, type MemberPageLook } from "@/lib/member-settings";
 import type { StoredPhoto } from "@/lib/photos/server";
+import { formatPhotoTime } from "@/lib/photo-time";
 import type { MemberImages } from "@/lib/member-profile";
 import {
   blueskyPostUrl,
@@ -36,11 +36,11 @@ export function formatDay(date: string) {
   });
 }
 
-/** Short calendar date for thumbnails, e.g. "10/14/26". */
+/** Short calendar date for thumbnails, e.g. "Oct 14, 2026". */
 function formatShortDay(date: string) {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
-    year: "2-digit",
-    month: "numeric",
+    year: "numeric",
+    month: "short",
     day: "numeric",
     timeZone: "UTC",
   });
@@ -147,11 +147,18 @@ export default function MemberPage(props: MemberPageProps) {
               <ul className="recent-photos">
                 {recent.map((p) => (
                   <li key={p.rkey} className={p.rkey === photo?.rkey ? "selected" : undefined}>
-                    <Link href={storedPhotoPath(owner, p)} aria-current={p.rkey === photo?.rkey ? "page" : undefined}>
+                    {/* The date is outside the link, so a photo without alt text needs a label for screen readers. */}
+                    <Link
+                      href={storedPhotoPath(owner, p)}
+                      aria-current={p.rkey === photo?.rkey ? "page" : undefined}
+                      aria-label={p.record.alt ? undefined : `Photo from ${formatShortDay(p.record.displayDate)}`}
+                    >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={thumbnailUrl(owner.did, p.record.image.ref.toString())} alt={p.record.alt ?? ""} loading="lazy" />
-                      <span className="date">{formatShortDay(p.record.displayDate)}</span>
                     </Link>
+                    <time className="date" dateTime={p.record.displayDate}>
+                      {formatShortDay(p.record.displayDate)}
+                    </time>
                   </li>
                 ))}
               </ul>
@@ -159,10 +166,10 @@ export default function MemberPage(props: MemberPageProps) {
               <p className="rail-empty">No photos yet.</p>
             )}
             <p className="rail-more">
-              » <Link href={photoCalendarPath(owner)}>View all photos</Link>
+              » <Link href={photoCalendarPath(owner)}>All Photos</Link>
             </p>
             <p className="rail-more rail-more-spaced">
-              » <Link href="/members">View Member Directory</Link>
+              » <Link href="/members">Member Directory</Link>
             </p>
           </aside>
 
@@ -184,7 +191,7 @@ export default function MemberPage(props: MemberPageProps) {
               </Suspense>
             )}
             <p className="rail-more">
-              » <Link href="/groups">View all groups</Link>
+              » <Link href="/groups">All Groups</Link>
             </p>
           </aside>
         </div>
@@ -333,12 +340,9 @@ function CenterPhoto({
       </div>
 
       <div className="photo-text">
-        {record.caption && <h2 className="caption">{record.caption}</h2>}
+        {/* When it was posted, in the poster's time zone: "Nov 17, 2026, 11:57 AM ET". */}
         <p className="photo-date">
-          <time dateTime={record.displayDate}>{formatDay(record.displayDate)}</time>
-        </p>
-        <p className="uploaded">
-          Photo uploaded at <LocalTime iso={record.createdAt} format="time" />
+          <time dateTime={record.createdAt}>{formatPhotoTime(record.createdAt, record.timeZone)}</time>
           {uploader && (
             <>
               {" by "}
@@ -346,6 +350,7 @@ function CenterPhoto({
             </>
           )}
         </p>
+        {record.caption && <h2 className="caption">{record.caption}</h2>}
       </div>
 
       <Guestbook

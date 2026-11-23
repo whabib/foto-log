@@ -2,7 +2,7 @@ import Link from "next/link";
 import { type FriendCard, timeAgo } from "@/lib/friends";
 import { displayName, memberPath } from "@/lib/photos/urls";
 
-/** The right column's cards: each friend's newest photo, handle and how long ago. */
+/** The right column's cards: each friend's newest photo, then their name and how long ago on one line. */
 export function FriendCardList({
   cards,
   now,
@@ -32,10 +32,13 @@ export function FriendCardList({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={c.thumbnail} alt={c.alt} loading="lazy" />
             </Link>
-            <span className="friend-when">{timeAgo(c.createdAt, now)}</span>
-            <Link href={memberPath(c)} className="friend-name">
-              {name}
-            </Link>
+            <p className="friend-caption">
+              <Link href={memberPath(c)} className="friend-name">
+                {name}
+              </Link>
+              {" · "}
+              <span className="friend-when">{timeAgo(c.createdAt, now)}</span>
+            </p>
           </li>
         );
       })}
