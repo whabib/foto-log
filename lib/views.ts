@@ -50,32 +50,28 @@ export function hourBucket(ms: number): Date {
 /**
  * Remembers used tokens in memory, per server instance, so each counts
  * once. Nothing here is stored. With several instances each keeps its own
- * memory, so a replayed token can count at most once per instance.
+ * memory, so a replayed token can count at most once per instance. When
+ * the memory is full of tokens that are still valid, new tokens are turned
+ * away rather than forgetting a valid one, which would let it count again.
  */
 export class UsedTokens {
   private used = new Map<string, number>();
 
   constructor(private readonly maxEntries = 50_000) {}
 
-  /** Marks the token used; false if it already was. */
+  /** Marks the token used; false if it already was, or if there's no room to remember it. */
   claim(claim: ViewClaim, now: number): boolean {
     if (this.used.has(claim.nonce)) return false;
-    if (this.used.size >= this.maxEntries) this.prune(now);
+    if (this.used.size >= this.maxEntries) {
+      // Expired tokens can't count anyway, so they're safe to forget.
+      for (const [k, expires] of this.used) if (expires < now) this.used.delete(k);
+      if (this.used.size >= this.maxEntries) return false;
+    }
     this.used.set(claim.nonce, claim.issuedAt + VIEW_TOKEN_TTL_MS);
     return true;
   }
 
   get size(): number {
     return this.used.size;
-  }
-
-  /** Drops expired tokens (they can't count anyway), then the oldest if still full. */
-  private prune(now: number): void {
-    for (const [k, expires] of this.used) if (expires < now) this.used.delete(k);
-    // Maps iterate in insertion order, so this drops the oldest.
-    for (const k of this.used.keys()) {
-      if (this.used.size < this.maxEntries) break;
-      this.used.delete(k);
-    }
   }
 }

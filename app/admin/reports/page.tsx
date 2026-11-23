@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/admin-server";
 import { memberPath, photoKeyPath, thumbnailUrl } from "@/lib/photos/urls";
+import { hourBucket } from "@/lib/views";
 import { REPORT_ROWS, type PhotoViews, viewsByMember, viewsByPhoto } from "@/lib/views-server";
 
 export const metadata: Metadata = { title: "Reports · Admin · foto-log" };
@@ -37,7 +38,7 @@ function PhotoTable({ rows, caption }: { rows: PhotoViews[]; caption: string }) 
             return (
               <tr key={`${p.did}/${p.rkey}`} className={p.banned ? "banned" : undefined}>
                 <td>
-                  <Link href={photoKeyPath(owner, p.rkey)}>
+                  <Link href={photoKeyPath(owner, p.rkey)} aria-label={`${memberLabel(p)}'s photo ${p.rkey}`}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img className="report-thumb" src={thumbnailUrl(p.did, p.imageCid)} alt="" width={48} height={48} />
                   </Link>
@@ -65,9 +66,11 @@ export default async function ReportsPage() {
   if (!user) redirect("/login");
   if (!(await isAdmin(user.did))) notFound();
 
-  // A server component renders once per request, so reading the clock here is fine.
+  // Views are counted by the hour, so the window starts at the hour 24 hours
+  // ago: it includes all of that hour, up to 25 hours back. A server
+  // component renders once per request, so reading the clock here is fine.
   // eslint-disable-next-line react-hooks/purity
-  const since = new Date(Date.now() - DAY_MS);
+  const since = hourBucket(Date.now() - DAY_MS);
   const [allTime, lastDay, members] = await Promise.all([viewsByPhoto(null), viewsByPhoto(since), viewsByMember()]);
 
   return (
@@ -86,6 +89,7 @@ export default async function ReportsPage() {
       <PhotoTable rows={allTime} caption="Views by photo, all time" />
 
       <h2>Views by photo, last 24 hours</h2>
+      <p className="muted">From the start of the hour 24 hours ago, so up to 25 hours of views.</p>
       <PhotoTable rows={lastDay} caption="Views by photo in the last 24 hours" />
 
       <h2>Views by member</h2>

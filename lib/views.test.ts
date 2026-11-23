@@ -52,11 +52,19 @@ describe("UsedTokens", () => {
     expect(used.claim(claim("b"), 6_000)).toBe(true);
   });
 
-  it("stays within its memory cap, dropping expired tokens first", () => {
+  it("turns new tokens away when full of valid ones, and keeps blocking used ones", () => {
     const used = new UsedTokens(10);
-    for (let i = 0; i < 1_000; i++) used.claim(claim(`n${i}`), 5_000);
-    expect(used.size).toBeLessThanOrEqual(10);
-    // The newest are still remembered.
-    expect(used.claim(claim("n999"), 5_000)).toBe(false);
+    for (let i = 0; i < 10; i++) expect(used.claim(claim(`n${i}`), 5_000)).toBe(true);
+    expect(used.claim(claim("overflow"), 5_000)).toBe(false);
+    expect(used.size).toBe(10);
+    for (let i = 0; i < 10; i++) expect(used.claim(claim(`n${i}`), 5_000)).toBe(false);
+  });
+
+  it("forgets expired tokens to make room", () => {
+    const used = new UsedTokens(10);
+    for (let i = 0; i < 10; i++) used.claim(claim(`n${i}`), 5_000);
+    const later = 1_000 + VIEW_TOKEN_TTL_MS + 1;
+    expect(used.claim(claim("fresh", "2026-11-22-01", later - 5_000), later)).toBe(true);
+    expect(used.size).toBe(1);
   });
 });

@@ -28,10 +28,15 @@ export async function recordView(token: string, now = Date.now()): Promise<ViewR
   const db = await getDb();
   const bucket = hourBucket(now);
   // Only photos foto-log knows of; a deleted photo's page can't keep counting.
+  // The index row is locked, so this can't interleave with deleting the photo
+  // or the account: either the delete waits for this count and then removes
+  // it, or this sees the photo is gone.
   const result = await db.execute(sql`
     INSERT INTO ${photoView} (member_did, photo_rkey, created_at, impressions)
     SELECT ${claim.did}, ${claim.rkey}, ${bucket}, 1
-    WHERE EXISTS (SELECT 1 FROM ${photoIndex} WHERE ${photoIndex.did} = ${claim.did} AND ${photoIndex.rkey} = ${claim.rkey})
+    WHERE EXISTS (
+      SELECT 1 FROM ${photoIndex} WHERE ${photoIndex.did} = ${claim.did} AND ${photoIndex.rkey} = ${claim.rkey} FOR SHARE
+    )
     ON CONFLICT (member_did, photo_rkey, created_at) DO UPDATE SET impressions = ${photoView.impressions} + 1`);
   return (result.rowCount ?? 0) > 0 ? "counted" : "unknown";
 }
@@ -94,7 +99,7 @@ function toPhotoViews(r: PhotoRow): PhotoViews {
   };
 }
 
-/** The most viewed photos, all time or since `since`. */
+/** The most viewed photos, all time or since `since` (compared with each hour's start). */
 export async function viewsByPhoto(since: Date | null, limit = REPORT_ROWS): Promise<PhotoViews[]> {
   const db = await getDb();
   const window = since ? sql`AND v.created_at >= ${since}` : sql``;
