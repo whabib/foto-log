@@ -36,13 +36,13 @@ export async function recordView(token: string, now = Date.now()): Promise<ViewR
       ON CONFLICT (nonce) DO NOTHING
       RETURNING 1
     ), counted AS (
-      INSERT INTO ${photoView} (member_did, photo_rkey, created_at, impressions)
+      INSERT INTO ${photoView} (member_did, photo_rkey, view_hour, impressions)
       SELECT ${claim.did}, ${claim.rkey}, ${bucket}, 1
       WHERE EXISTS (SELECT 1 FROM claimed)
         AND EXISTS (
           SELECT 1 FROM ${photoIndex} WHERE ${photoIndex.did} = ${claim.did} AND ${photoIndex.rkey} = ${claim.rkey} FOR SHARE
         )
-      ON CONFLICT (member_did, photo_rkey, created_at) DO UPDATE SET impressions = ${photoView.impressions} + 1
+      ON CONFLICT (member_did, photo_rkey, view_hour) DO UPDATE SET impressions = ${photoView.impressions} + 1
       RETURNING 1
     )
     SELECT (SELECT count(*) FROM claimed)::int AS claimed, (SELECT count(*) FROM counted)::int AS counted`);
@@ -108,7 +108,7 @@ function toPhotoViews(r: PhotoRow): PhotoViews {
 /** The most viewed photos, all time or since `since` (compared with each hour's start). */
 export async function viewsByPhoto(since: Date | null, limit = REPORT_ROWS): Promise<PhotoViews[]> {
   const db = await getDb();
-  const window = since ? sql`AND v.created_at >= ${since}` : sql``;
+  const window = since ? sql`AND v.view_hour >= ${since}` : sql``;
   const { rows } = await db.execute<PhotoRow>(sql`
     SELECT v.member_did AS did, v.photo_rkey AS rkey, m.handle,
       CASE WHEN m.show_fotolog_name THEN m.fotolog_name END AS name,

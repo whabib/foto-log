@@ -226,19 +226,19 @@ export const photoView = pgTable(
   {
     memberDid: text("member_did").notNull(),
     photoRkey: text("photo_rkey").notNull(),
-    /** The start of the hour the views happened in. */
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    /** The start of the UTC hour the views happened in. */
+    viewHour: timestamp("view_hour", { withTimezone: true }).notNull(),
     impressions: integer("impressions").notNull().default(1),
   },
   (t) => [
-    primaryKey({ columns: [t.memberDid, t.photoRkey, t.createdAt] }),
+    primaryKey({ columns: [t.memberDid, t.photoRkey, t.viewHour] }),
     foreignKey({
       name: "photo_view_photo_fk",
       columns: [t.memberDid, t.photoRkey],
       foreignColumns: [photoIndex.did, photoIndex.rkey],
     }).onDelete("cascade"),
-    index("photo_view_created_at_idx").on(t.createdAt),
-    index("photo_view_member_created_at_idx").on(t.memberDid, t.createdAt),
+    index("photo_view_view_hour_idx").on(t.viewHour),
+    index("photo_view_member_view_hour_idx").on(t.memberDid, t.viewHour),
   ],
 );
 

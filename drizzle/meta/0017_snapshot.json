@@ -1,5 +1,5 @@
 {
-  "id": "fb3b474a-6128-44fb-b4b5-cd7d04861a17",
+  "id": "87a07160-b105-47f6-ac29-70d05eed8817",
   "prevId": "92203515-3be3-4fc1-9a5c-ace175a5be55",
   "version": "7",
   "dialect": "postgresql",
@@ -750,8 +750,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "created_at": {
-          "name": "created_at",
+        "view_hour": {
+          "name": "view_hour",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
@@ -765,11 +765,11 @@
         }
       },
       "indexes": {
-        "photo_view_created_at_idx": {
-          "name": "photo_view_created_at_idx",
+        "photo_view_view_hour_idx": {
+          "name": "photo_view_view_hour_idx",
           "columns": [
             {
-              "expression": "created_at",
+              "expression": "view_hour",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -780,8 +780,8 @@
           "method": "btree",
           "with": {}
         },
-        "photo_view_member_created_at_idx": {
-          "name": "photo_view_member_created_at_idx",
+        "photo_view_member_view_hour_idx": {
+          "name": "photo_view_member_view_hour_idx",
           "columns": [
             {
               "expression": "member_did",
@@ -790,7 +790,7 @@
               "nulls": "last"
             },
             {
-              "expression": "created_at",
+              "expression": "view_hour",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -820,12 +820,12 @@
         }
       },
       "compositePrimaryKeys": {
-        "photo_view_member_did_photo_rkey_created_at_pk": {
-          "name": "photo_view_member_did_photo_rkey_created_at_pk",
+        "photo_view_member_did_photo_rkey_view_hour_pk": {
+          "name": "photo_view_member_did_photo_rkey_view_hour_pk",
           "columns": [
             "member_did",
             "photo_rkey",
-            "created_at"
+            "view_hour"
           ]
         }
       },
