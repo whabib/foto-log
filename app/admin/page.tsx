@@ -27,6 +27,9 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
   return (
     <main className="admin-page">
       <h1>Admin</h1>
+      <p>
+        <Link href="/admin/reports">Reports</Link>: photo views by photo and by member.
+      </p>
       <h2>Members</h2>
       <p className="muted">
         {total} {total === 1 ? "member" : "members"}, newest first. Dates and times are in UTC.

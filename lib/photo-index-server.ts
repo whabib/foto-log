@@ -14,6 +14,7 @@ import {
 } from "@/lib/jetstream";
 import { assertValidPhotoRecord, type PhotoRecord } from "@/lib/photo-record";
 import { deletePhotoAfterPost, scanPhotos } from "@/lib/photos/server";
+import { pruneViewTokens } from "@/lib/views-server";
 import { log } from "@/lib/log";
 
 const CURSOR_KEY = "jetstream_cursor";
@@ -447,6 +448,7 @@ export async function indexTick(): Promise<
     const result = await catchUp();
     const postDeletes = await deletePhotosOfDeletedPosts();
     const { backfilled, refreshed } = await backfillPending();
+    await pruneViewTokens();
     return { catchUp: result, postDeletes, backfilled, refreshed };
   });
 }

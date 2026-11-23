@@ -16,6 +16,7 @@ import { isValidDateKey, parsePhotoRecordKey, photoRecordKey } from "@/lib/photo
 import { railWindow } from "@/lib/photos/rail";
 import { fetchPhoto, listPhotos, photoNeighbors, type StoredPhoto } from "@/lib/photos/server";
 import type { MemberRef } from "@/lib/photos/urls";
+import { issueViewToken } from "@/lib/views-server";
 import { log } from "@/lib/log";
 
 export const RECENT_PHOTOS = 6;
@@ -92,6 +93,7 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     photo ? creditFor(owner.did, photo) : null,
   ]);
 
+  const isOwner = user?.did === owner.did;
   return {
     owner,
     onViewerList,
@@ -104,7 +106,9 @@ export const loadMemberPage = cache(async (actorParam: string, date?: string) =>
     recent: rail,
     older,
     newer,
-    isOwner: user?.did === owner.did,
+    isOwner,
+    // The owner's own visits don't count as views.
+    viewToken: photo && !isOwner ? issueViewToken(owner.did, photo.rkey) : null,
     signedIn: user !== null,
     signBlocked,
     group: groupInfo,
