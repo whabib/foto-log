@@ -5,6 +5,7 @@ name: Image scan
 # it with Docker Scout. Scout reads the hardened base's VEX statements, so
 # CVEs Docker has shown don't affect the image aren't reported. (Artifact
 # Registry's own scanner can't read these images: they have no os-release.)
+# Posts the result to Slack after every run, including failed ones.
 # Keeps one issue up to date: opened or commented on while there are
 # critical, high or medium findings, closed once there are none. Low and
 # unspecified findings are listed in the run's summary but don't open the issue.
@@ -105,6 +106,8 @@ jobs:
           minor=$(jq '[.[] | select((.bundled | not) and (.severity | IN("CRITICAL", "HIGH", "MEDIUM") | not))] | length' "$RUNNER_TEMP/findings.json")
           bundled=$(jq '[.[] | select(.bundled)] | length' "$RUNNER_TEMP/findings.json")
           echo "blocking=$blocking" >> "$GITHUB_OUTPUT"
+          echo "minor=$minor" >> "$GITHUB_OUTPUT"
+          echo "bundled=$bundled" >> "$GITHUB_OUTPUT"
           {
             echo "Critical, high and medium findings in \`$IMAGE_REF\`: **$blocking**"
             echo
@@ -137,3 +140,47 @@ jobs:
           elif [ -n "$existing" ]; then
             gh issue close "$existing" --comment "The scheduled scan found no critical, high or medium findings. $RUN_URL"
           fi
+
+      # Runs even when an earlier step fails, so a broken scan still shows up in Slack.
+      - name: Post to Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          COUNTED: ${{ steps.count.outcome }}
+          BLOCKING: ${{ steps.count.outputs.blocking }}
+          MINOR: ${{ steps.count.outputs.minor }}
+          BUNDLED: ${{ steps.count.outputs.bundled }}
+          IMAGE_REF: ${{ steps.build.outputs.image }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL isn't set, so nothing was posted."
+            exit 0
+          fi
+          findings="$RUNNER_TEMP/findings.json"
+          if [ "$COUNTED" != "success" ] || [ ! -s "$findings" ]; then
+            findings=/dev/null
+          fi
+          # Slack needs &, < and > escaped in message text. Lists at most 25 findings.
+          jq -n --slurpfile f <(cat "$findings" 2>/dev/null || echo '[]') \
+            --arg counted "$COUNTED" --arg blocking "${BLOCKING:-0}" --arg minor "${MINOR:-0}" \
+            --arg bundled "${BUNDLED:-0}" --arg image "$IMAGE_REF" --arg ref "$REF_NAME" --arg run "$RUN_URL" '
+            def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+            ($f[0] // [] | map(select(.bundled | not))
+              | sort_by([({"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}[.severity] // 4), .package, .cve])) as $list
+            | ($blocking | tonumber) as $b | ($minor | tonumber) as $m
+            | {text: (
+                if $counted != "success" then
+                  ":x: *Image scan failed on `\($ref)`* before it could count findings. <\($run)|View the run>"
+                else
+                  (if $b > 0 then ":rotating_light:" elif $m > 0 then ":warning:" else ":white_check_mark:" end)
+                  + " *Image scan of `\($ref)`*: \($b) critical, high or medium, \($m) low or unspecified"
+                  + "\n`\($image | esc)`"
+                  + ($list[:25] | map("\n• *\(.severity)* \(.cve | esc) in `\(.package | esc)` (fixed in \(.fixed | esc))") | join(""))
+                  + (if ($list | length) > 25 then "\n…and \(($list | length) - 25) more" else "" end)
+                  + (if ($bundled | tonumber) > 0 then "\nNot counted: \($bundled) in copies bundled inside Next.js" else "" end)
+                  + "\n<\($run)|View the run>"
+                end)}
+          ' > "$RUNNER_TEMP/slack.json"
+          curl --fail-with-body -sS -X POST -H "Content-Type: application/json" --data @"$RUNNER_TEMP/slack.json" "$SLACK_WEBHOOK_URL"
