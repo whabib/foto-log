@@ -3,7 +3,7 @@ import Header from "./components/Header";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "foto-log",
+  title: "Foto-log",
   description: "One photo a day, on the open web.",
 };
 
