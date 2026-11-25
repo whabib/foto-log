@@ -212,16 +212,19 @@ export async function photoOfTheDay(): Promise<(IndexedPhoto & { name: string | 
 }
 
 /**
- * The fotologs with the most views today (New York time), most first, each
- * with its newest photo. Members who are banned are left out.
+ * The fotologs with the most views in the last 24 hours, most first, each
+ * with its newest photo. When fewer than `limit` fotologs were viewed in that
+ * time, the rest of the list is filled with the most viewed fotologs of all
+ * time, each fotolog at most once. Members who are banned are left out.
  */
-export async function mostViewedToday(limit: number): Promise<(IndexedPhoto & { name: string | null })[]> {
+export async function mostViewedFotologs(limit: number): Promise<(IndexedPhoto & { name: string | null })[]> {
   const db = await getDb();
   const { rows } = await db.execute<IndexedRow>(sql`
     SELECT newest.* FROM (
-      SELECT v.member_did, SUM(v.impressions) AS views
+      SELECT v.member_did,
+        COALESCE(SUM(v.impressions) FILTER (WHERE v.view_hour >= now() - interval '24 hours'), 0) AS recent,
+        SUM(v.impressions) AS total
       FROM ${photoView} v
-      WHERE v.view_hour >= ${dayStart(0)}
       GROUP BY v.member_did
     ) top
     JOIN LATERAL (
@@ -234,7 +237,7 @@ export async function mostViewedToday(limit: number): Promise<(IndexedPhoto & { 
       LIMIT 1
     ) newest ON TRUE
     WHERE NOT EXISTS (SELECT 1 FROM ${bannedMember} b WHERE b.did = top.member_did)
-    ORDER BY top.views DESC, newest.created_at DESC
+    ORDER BY top.recent DESC, top.total DESC, newest.created_at DESC
     LIMIT ${limit}`);
   return rows.map(toIndexed);
 }
