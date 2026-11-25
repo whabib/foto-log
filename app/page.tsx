@@ -4,7 +4,7 @@ import { type FriendCard, timeAgo } from "@/lib/friends";
 import { resolveActor } from "@/lib/identity";
 import { type IndexedPhoto, recentPhotos } from "@/lib/photo-index-server";
 import { displayName, imageUrl, memberPath, photoKeyPath, thumbnailUrl } from "@/lib/photos/urls";
-import { mostViewedToday, photoOfTheDay } from "@/lib/views-server";
+import { mostViewedFotologs, photoOfTheDay } from "@/lib/views-server";
 import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +47,7 @@ async function safely<T>(what: string, load: () => Promise<T>, empty: T): Promis
 async function loadHome() {
   const [recent, viewed, featured] = await Promise.all([
     safely("recent photos", () => recentPhotos(COLUMN_PHOTOS), [] as Photo[]),
-    safely("most viewed fotologs", () => mostViewedToday(COLUMN_PHOTOS), [] as Photo[]),
+    safely("most viewed fotologs", () => mostViewedFotologs(COLUMN_PHOTOS), [] as Photo[]),
     safely("Photo of the Day", () => photoOfTheDay(), null as Photo | null),
   ]);
   // No views yesterday: the newest photo stands in.
@@ -108,7 +108,7 @@ export default async function Home() {
           <h2 id="viewed-heading" className="home-col-heading">
             Most Viewed Fotologs Today
           </h2>
-          <FriendCardList cards={viewed} now={now} isOwner={false} empty="No views yet today." />
+          <FriendCardList cards={viewed} now={now} isOwner={false} empty="No views yet." />
         </section>
       </div>
     </main>
