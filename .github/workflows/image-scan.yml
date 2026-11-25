@@ -6,7 +6,8 @@ name: Image scan
 # CVEs Docker has shown don't affect the image aren't reported. (Artifact
 # Registry's own scanner can't read these images: they have no os-release.)
 # Keeps one issue up to date: opened or commented on while there are
-# critical, high or medium findings, closed once there are none.
+# critical, high or medium findings, closed once there are none. Low and
+# unspecified findings are listed in the run's summary but don't open the issue.
 
 on:
   schedule:
@@ -31,7 +32,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: google-github-actions/auth@v3
         id: gcp
@@ -63,12 +64,12 @@ jobs:
           echo "image=$IMAGE:$tag" >> "$GITHUB_OUTPUT"
 
       - name: Scan with Docker Scout
-        uses: docker/scout-action@5dae9c7571dd0f3de81f5b501240c593c13c3eb6 # v1.9.3
+        uses: docker/scout-action@b265cd48f8a1451d2680815b3e8dc4ed65ee16e7 # v1.30.0
         with:
           command: cves
           image: registry://${{ steps.build.outputs.image }}
           platform: linux/amd64
-          only-severities: critical,high,medium
+          only-severities: critical,high,medium,low,unspecified
           sarif-file: ${{ runner.temp }}/scout.sarif
           summary: true
           write-comment: false
@@ -100,16 +101,19 @@ jobs:
             | map(. + {bundled: ((.path | contains("/node_modules/next/dist/compiled/")) and (.package | endswith("@0.0.0")))})
             | unique_by([.cve, .package])
           ' "$SARIF" > "$RUNNER_TEMP/findings.json"
-          blocking=$(jq '[.[] | select(.bundled | not)] | length' "$RUNNER_TEMP/findings.json")
+          blocking=$(jq '[.[] | select((.bundled | not) and (.severity | IN("CRITICAL", "HIGH", "MEDIUM")))] | length' "$RUNNER_TEMP/findings.json")
+          minor=$(jq '[.[] | select((.bundled | not) and (.severity | IN("CRITICAL", "HIGH", "MEDIUM") | not))] | length' "$RUNNER_TEMP/findings.json")
           bundled=$(jq '[.[] | select(.bundled)] | length' "$RUNNER_TEMP/findings.json")
           echo "blocking=$blocking" >> "$GITHUB_OUTPUT"
           {
             echo "Critical, high and medium findings in \`$IMAGE_REF\`: **$blocking**"
             echo
-            if [ "$blocking" -gt 0 ]; then
+            echo "Low and unspecified findings (listed, not counted): **$minor**"
+            echo
+            if [ $((blocking + minor)) -gt 0 ]; then
               echo "| Severity | CVE | Package | Fixed in |"
               echo "| --- | --- | --- | --- |"
-              jq -r '[.[] | select(.bundled | not)] | sort_by({"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2}[.severity]) | .[] | "| \(.severity) | \(.cve) | \(.package) | \(.fixed) |"' "$RUNNER_TEMP/findings.json"
+              jq -r '[.[] | select(.bundled | not)] | sort_by([({"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}[.severity] // 4), .package, .cve]) | .[] | "| \(.severity) | \(.cve) | \(.package) | \(.fixed) |"' "$RUNNER_TEMP/findings.json"
               echo
             fi
             echo "Not counted: $bundled findings in unversioned copies bundled inside Next.js ($(jq -r '[.[] | select(.bundled) | .package | sub("^pkg:npm/"; "") | sub("@0.0.0$"; "")] | unique | join(", ")' "$RUNNER_TEMP/findings.json"))."
