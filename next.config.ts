@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The FAQ page reads its Markdown at request time.
+  outputFileTracingIncludes: { "/faq": ["./content/**/*"] },
   async headers() {
     return [
       {

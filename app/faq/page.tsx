@@ -5,13 +5,24 @@ import { marked } from "marked";
 
 export const metadata: Metadata = { title: "FAQ · Foto-log" };
 
-// Rendered at build time from the repo's content/faq.md, so editing that file
-// and merging is all it takes to update the page.
-export const dynamic = "force-static";
+/**
+ * The FAQ, written in content/faq.md. The page renders per request so the
+ * shared header shows who's signed in; the Markdown is read and parsed once
+ * per server instance. next.config.ts ships the file with the build.
+ */
+let faqHtml: Promise<string> | null = null;
 
-/** The FAQ, from content/faq.md. The file is ours, so its Markdown (and any HTML in it) is trusted. */
+function loadFaq(): Promise<string> {
+  faqHtml ??= readFile(path.join(process.cwd(), "content", "faq.md"), "utf8")
+    .then((markdown) => marked.parse(markdown))
+    .catch((err) => {
+      faqHtml = null;
+      throw err;
+    });
+  return faqHtml;
+}
+
 export default async function FaqPage() {
-  const markdown = await readFile(path.join(process.cwd(), "content", "faq.md"), "utf8");
-  const html = await marked.parse(markdown);
+  const html = await loadFaq();
   return <main className="faq-page" dangerouslySetInnerHTML={{ __html: html }} />;
 }
