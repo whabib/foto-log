@@ -96,6 +96,12 @@ a {
   min-width: 0;
 }
 
+/* A little extra room between the upload link and "Signed in as". */
+.site-header .upload-prompt {
+  margin-right: 12px;
+  white-space: nowrap;
+}
+
 .account-menu {
   position: relative;
   min-width: 0;
@@ -1518,6 +1524,14 @@ body:has(.member-theme) .account-menu li button:hover {
 @media (max-width: 560px) {
   .signed-in-label {
     display: none;
+  }
+
+  /* Narrow headers wrap the upload link instead of pushing the menu off screen. */
+  .site-header .upload-prompt {
+    margin-right: 4px;
+    white-space: normal;
+    text-align: right;
+    line-height: 1.2;
   }
 }
 
