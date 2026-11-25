@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import AccountMenu from "@/app/components/AccountMenu";
 import AccountWatcher from "@/app/components/AccountWatcher";
+import UploadPrompt from "@/app/components/UploadPrompt";
 import { isAdmin } from "@/lib/admin-server";
 import { getGroup } from "@/lib/groups-server";
 import { currentIdentity } from "@/lib/photos/server";
@@ -27,6 +28,7 @@ export default async function Header() {
       {user && identity ? (
         <div className="account">
           <AccountWatcher did={user.did} />
+          <UploadPrompt />
           <AccountMenu
             label={identity.name ?? (identity.handle ? `@${identity.handle}` : user.did)}
             myPage={memberPath(identity)}
@@ -36,7 +38,7 @@ export default async function Header() {
         </div>
       ) : (
         <Link href="/login" className="account">
-          Sign in
+          Sign in or Sign up!
         </Link>
       )}
     </header>

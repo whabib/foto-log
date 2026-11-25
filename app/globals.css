@@ -47,6 +47,7 @@ body {
 :root {
   --border: #e2e2e2;
   --accent: #0a66d8;
+  --visited: #6b4fa0;
   --error: #b42318;
 }
 
@@ -54,6 +55,7 @@ body {
   :root {
     --border: #2a2a2a;
     --accent: #5aa2ff;
+    --visited: #b49be0;
     --error: #ff7a6b;
   }
 }
@@ -92,6 +94,12 @@ a {
   gap: 12px;
   font-size: 0.9375rem;
   min-width: 0;
+}
+
+/* A little extra room between the upload link and "Signed in as". */
+.site-header .upload-prompt {
+  margin-right: 12px;
+  white-space: nowrap;
 }
 
 .account-menu {
@@ -1098,73 +1106,116 @@ body:has(.member-theme) .account-menu li button:hover {
 }
 
 .home {
+  --m-text-sm: 0.75rem;
   max-width: 1100px;
   margin: 0 auto;
   padding: 24px 16px 40px;
 }
 
-.home-intro {
-  margin-bottom: 28px;
+/* The home page's links: the site color, and a quieter one once visited. */
+.home a,
+.faq-page a {
+  color: var(--accent);
+}
+
+.home a:visited,
+.faq-page a:visited {
+  color: var(--visited);
+}
+
+.home-title {
+  margin: 0 0 24px;
+  text-align: center;
+  font-size: 2.5rem;
+}
+
+.home-cols {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 150px;
+  grid-template-areas: "left center right";
+  gap: 32px;
+}
+
+.home-left {
+  grid-area: left;
+  min-width: 0;
+}
+
+.home-center {
+  grid-area: center;
+  min-width: 0;
   text-align: center;
 }
 
-.home-intro h1 {
-  margin: 0 0 8px;
-  font-size: 1.75rem;
+.home-right {
+  grid-area: right;
+  min-width: 0;
 }
 
-.home-intro p {
+.home-col-heading {
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: 0.875rem;
+}
+
+.home-day-heading {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+}
+
+.home-day {
   margin: 0;
 }
 
-.home-heading {
-  margin: 0 0 12px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--border);
-  font-size: 1.125rem;
+.home-day img {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
+}
+
+.home-day figcaption {
+  margin-top: 6px;
+  font-size: 0.875rem;
+}
+
+.home-when {
+  color: var(--muted);
 }
 
 .home-empty {
   color: var(--muted);
 }
 
-.home-photos {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+.home-links {
+  display: flex;
+  justify-content: center;
   gap: 20px;
+  margin-top: 32px;
 }
 
-.home-photos li {
-  font-size: 0.8125rem;
-  overflow-wrap: anywhere;
-}
-
-.home-photo img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-}
-
-.home-name {
-  display: block;
-  margin-top: 4px;
-  font-weight: 600;
-}
-
-.home-when {
-  display: block;
-  color: var(--muted);
-}
-
+/* Phones and narrow windows: the Photo of the Day first, then each column. */
 @media (max-width: 860px) {
-  .home-photos {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+  .home-cols {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "center" "left" "right";
+    gap: 28px;
   }
+
+  .home-title {
+    font-size: 1.75rem;
+  }
+
+  .home .friend-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.faq-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+  line-height: 1.5;
 }
 
 .guestbook {
@@ -1473,6 +1524,14 @@ body:has(.member-theme) .account-menu li button:hover {
 @media (max-width: 560px) {
   .signed-in-label {
     display: none;
+  }
+
+  /* Narrow headers wrap the upload link instead of pushing the menu off screen. */
+  .site-header .upload-prompt {
+    margin-right: 4px;
+    white-space: normal;
+    text-align: right;
+    line-height: 1.2;
   }
 }
 
@@ -2048,4 +2107,8 @@ body:has(.member-theme) .account-menu li button:hover {
   width: 48px;
   height: 48px;
   object-fit: cover;
+}
+
+.home .friend-cards li {
+  text-align: center;
 }

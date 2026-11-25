@@ -34,4 +34,6 @@ npm run build
 
 Local dev needs no secrets. Sign-in uses an ATProto loopback OAuth client, so you can sign in with a real Bluesky (or other ATProto) account against your local server. Migrations in `drizzle/` run automatically when the server starts. After changing `lib/db/schema.ts`, run `npm run db:generate` to add a migration.
 
+The FAQ page (`/faq`) is rendered from [`content/faq.md`](content/faq.md) when the site is built: edit that file and merge to update it.
+
 Merges to `main` deploy to Cloud Run automatically. See [docs/infra.md](docs/infra.md), [docs/auth.md](docs/auth.md), [docs/lexicon.md](docs/lexicon.md) and [docs/plan.md](docs/plan.md).

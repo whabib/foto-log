@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { bannedMember, member, photoIndex, photoView, viewToken } from "@/lib/db/schema";
 import { randomId, sign, unsign } from "@/lib/crypto";
+import type { IndexedPhoto } from "@/lib/photo-index-server";
 import { hourBucket, parseViewPayload, tokenTiming, type ViewClaim, VIEW_TOKEN_TTL_MS, viewPayload } from "@/lib/views";
 
 /** A signed, single-use token the photo page sends back to count one view of the photo. */
@@ -153,4 +154,87 @@ export async function viewsByMember(limit = REPORT_ROWS): Promise<MemberViews[]>
     views: Number(r.views),
     banned: r.banned,
   }));
+}
+
+/** The home page's day: midnight to midnight in New York time. */
+export const HOME_TIME_ZONE = "America/New_York";
+
+type IndexedRow = {
+  did: string;
+  rkey: string;
+  name: string | null;
+  image_cid: string;
+  alt: string | null;
+  caption: string | null;
+  upload_date: string;
+  created_at: string | Date;
+};
+
+function toIndexed(r: IndexedRow): IndexedPhoto & { name: string | null } {
+  return {
+    did: r.did,
+    rkey: r.rkey,
+    name: r.name,
+    imageCid: r.image_cid,
+    alt: r.alt,
+    caption: r.caption,
+    uploadDate: r.upload_date,
+    createdAt: new Date(r.created_at),
+  };
+}
+
+/** The start of today in {@link HOME_TIME_ZONE}, as SQL, `daysAgo` days back. */
+function dayStart(daysAgo: number) {
+  return sql`((date_trunc('day', now() AT TIME ZONE ${HOME_TIME_ZONE}) - make_interval(days => ${daysAgo})) AT TIME ZONE ${HOME_TIME_ZONE})`;
+}
+
+/**
+ * The Photo of the Day: the photo with the most views yesterday (New York
+ * time), from a member who isn't banned. Null when nothing was viewed.
+ */
+export async function photoOfTheDay(): Promise<(IndexedPhoto & { name: string | null }) | null> {
+  const db = await getDb();
+  const { rows } = await db.execute<IndexedRow>(sql`
+    SELECT p.did, p.rkey, CASE WHEN m.show_fotolog_name THEN m.fotolog_name END AS name,
+      p.image_cid, p.alt, p.caption, p.upload_date, p.created_at
+    FROM (
+      SELECT v.member_did, v.photo_rkey, SUM(v.impressions) AS views
+      FROM ${photoView} v
+      WHERE v.view_hour >= ${dayStart(1)} AND v.view_hour < ${dayStart(0)}
+      GROUP BY v.member_did, v.photo_rkey
+    ) top
+    JOIN ${photoIndex} p ON p.did = top.member_did AND p.rkey = top.photo_rkey
+    JOIN ${member} m ON m.did = p.did
+    WHERE NOT EXISTS (SELECT 1 FROM ${bannedMember} b WHERE b.did = p.did)
+    ORDER BY top.views DESC, p.created_at DESC
+    LIMIT 1`);
+  return rows[0] ? toIndexed(rows[0]) : null;
+}
+
+/**
+ * The fotologs with the most views today (New York time), most first, each
+ * with its newest photo. Members who are banned are left out.
+ */
+export async function mostViewedToday(limit: number): Promise<(IndexedPhoto & { name: string | null })[]> {
+  const db = await getDb();
+  const { rows } = await db.execute<IndexedRow>(sql`
+    SELECT newest.* FROM (
+      SELECT v.member_did, SUM(v.impressions) AS views
+      FROM ${photoView} v
+      WHERE v.view_hour >= ${dayStart(0)}
+      GROUP BY v.member_did
+    ) top
+    JOIN LATERAL (
+      SELECT p.did, p.rkey, CASE WHEN m.show_fotolog_name THEN m.fotolog_name END AS name,
+        p.image_cid, p.alt, p.caption, p.upload_date, p.created_at
+      FROM ${photoIndex} p
+      JOIN ${member} m ON m.did = p.did
+      WHERE p.did = top.member_did AND p.created_at <= now() + interval '5 minutes'
+      ORDER BY p.created_at DESC
+      LIMIT 1
+    ) newest ON TRUE
+    WHERE NOT EXISTS (SELECT 1 FROM ${bannedMember} b WHERE b.did = top.member_did)
+    ORDER BY top.views DESC, newest.created_at DESC
+    LIMIT ${limit}`);
+  return rows.map(toIndexed);
 }
