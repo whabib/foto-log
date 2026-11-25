@@ -213,16 +213,21 @@ export async function photoOfTheDay(): Promise<(IndexedPhoto & { name: string | 
 
 /**
  * The fotologs with the most views in the last 24 hours, most first, each
- * with its newest photo. When fewer than `limit` fotologs were viewed in that
+ * with its newest photo. Views are stored by the hour, so "the last 24 hours"
+ * starts at the top of the hour 24 hours ago and can cover up to 25 hours. When fewer than `limit` fotologs were viewed in that
  * time, the rest of the list is filled with the most viewed fotologs of all
  * time, each fotolog at most once. Members who are banned are left out.
  */
-export async function mostViewedFotologs(limit: number): Promise<(IndexedPhoto & { name: string | null })[]> {
+export async function mostViewedFotologs(
+  limit: number,
+  now = Date.now(),
+): Promise<(IndexedPhoto & { name: string | null })[]> {
   const db = await getDb();
+  const since = hourBucket(now - 24 * 60 * 60 * 1000);
   const { rows } = await db.execute<IndexedRow>(sql`
     SELECT newest.* FROM (
       SELECT v.member_did,
-        COALESCE(SUM(v.impressions) FILTER (WHERE v.view_hour >= now() - interval '24 hours'), 0) AS recent,
+        COALESCE(SUM(v.impressions) FILTER (WHERE v.view_hour >= ${since}), 0) AS recent,
         SUM(v.impressions) AS total
       FROM ${photoView} v
       GROUP BY v.member_did
